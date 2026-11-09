@@ -18,8 +18,6 @@
   "cn ba.addash #，并令其在移动时受到正比于距离",
   "tw ba.addash #，並令其在移動時受到正比於距離",
   "cn ba.charged 蓄力#秒后射出直线飞",
-  "tw ba.dt.apoptosis 內攻擊附帶#點凋亡損傷，並使攻擊範圍內",
-  "tw ba.dt.apoptosis （+#），受到凋亡損傷時回復#點技力",
   "cn sup.pull 部署后获得可吸收相当于自己最大",
   "tw sup.pull 部署後獲得可吸收相當於自己最大",
   "cn sup.pull 大生命，并获得可吸收相当于最大生命",
