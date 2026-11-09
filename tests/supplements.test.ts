@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type BuildInput, type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
-import type { EffectType } from '../src/core/types'
 import { keywordGroups, operatorDetail, query } from '../src/core/query'
+import type { EffectType } from '../src/core/types'
 import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
 

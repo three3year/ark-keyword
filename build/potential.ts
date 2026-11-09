@@ -2,7 +2,7 @@
 // 插在潛能1 敘述中對應數字的後面。以「第幾個數字」對齊,所以兩個版本的數字個數必須相同
 // (遊戲資料裡偶有措辭不同,例如「当阻挡住」與「阻挡」,數字順序仍一致)。
 import type { Run } from '../src/core/types'
-import { plainText, push } from './richText'
+import { plainText, push, startsMark } from './richText'
 
 export interface PotentialVersion {
   /** requiredPotentialRank:潛能等級 - 1。 */
@@ -66,17 +66,17 @@ export function withPotentialBonus(base: Run[], higher: PotentialVersion[]): Run
 
   const out: Run[] = []
   let offset = 0
-  for (const r of base) {
+  base.forEach((r, index) => {
     let start = 0
     for (let i = 1; i <= r.t.length; i++) {
       const bonus = inserts.get(offset + i)
       if (!bonus) continue
-      push(out, { ...r, t: r.t.slice(start, i) })
+      push(out, { ...r, t: r.t.slice(start, i) }, start === 0 && startsMark(base, index))
       push(out, { t: bonus.text, s: 'pot', p: label(bonus) })
       start = i
     }
-    push(out, { ...r, t: r.t.slice(start) })
+    push(out, { ...r, t: r.t.slice(start) }, start === 0 && startsMark(base, index))
     offset += r.t.length
-  }
+  })
   return out
 }

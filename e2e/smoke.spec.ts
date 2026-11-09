@@ -393,7 +393,7 @@ test('友方技力回復:在增益分組緊接鼓舞之後;點了之後只列出
   const panel = page.getByRole('complementary', { name: '關鍵字面板' })
   const buff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '增益', exact: true }) })
   await expect(buff.getByRole('button', { name: '鼓舞', exact: true })).toBeVisible()
-  const names =(await buff.locator('.kw-list').nth(2).locator('.kw').allTextContents()).map((t) => t.trim())
+  const names = (await buff.locator('.kw-list').nth(2).locator('.kw').allTextContents()).map((t) => t.trim())
   expect(names[names.indexOf('鼓舞') + 1]).toBe('友方技力回復')
 
   await buff.getByRole('button', { name: '友方技力回復', exact: true }).click()
