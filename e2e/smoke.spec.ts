@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { cnOnly, groupRowNames, keywordName } from './data'
+import { cnOnly, groupRowNames, keywordName, powerDisplayName, powerListRows } from './data'
 
 test('點一個關鍵字後看到結果卡,切換伺服器後結果更新', async ({ page }) => {
   await page.goto('./')
@@ -121,12 +121,12 @@ test('搜尋條件 chip:加入時只亮施加,再亮一顆後結果變多或不�
   await expect(chip).toHaveCount(1)
   await types.getByRole('button', { name: '利用' }).click()
   await expect(chip).toHaveCount(0)
-  await expect(page.getByText('點選關鍵字或職業開始搜尋')).toBeVisible()
+  await expect(page.getByText('點選關鍵字、職業或勢力開始搜尋')).toBeVisible()
 })
 
 test('只選職業也開始搜尋:列出該職業幹員,結果卡是只有卡頭、一行多張的小卡;只勾星級不搜尋', async ({ page }) => {
   await page.goto('./')
-  const hint = page.getByText('點選關鍵字或職業開始搜尋')
+  const hint = page.getByText('點選關鍵字、職業或勢力開始搜尋')
   await expect(hint).toBeVisible()
   await page.getByRole('checkbox', { name: '6★' }).check()
   await expect(hint).toBeVisible()
@@ -183,8 +183,12 @@ test('職業 chip:在搜尋條件 chip 上方、依遊戲內順序,× 與篩選�
   await expect(professionChips).toHaveText([/先鋒/, /狙擊/])
 })
 
-test('沒有結果時依職業、搜尋條件、伺服器、星級列出生效的條件', async ({ page }) => {
+test('沒有結果時依職業、勢力、搜尋條件、伺服器、星級列出生效的條件', async ({ page }) => {
   await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const [kazimierz, abyssal] = [powerDisplayName('kazimierz'), powerDisplayName('abyssal')]
+  await panel.getByRole('button', { name: abyssal, exact: true }).click()
+  await panel.getByRole('button', { name: kazimierz, exact: true }).click()
   await page.getByRole('button', { name: '暈眩', exact: true }).first().click()
   await page.getByRole('button', { name: '停頓', exact: true }).first().click()
   await page.getByRole('group', { name: '停頓的效果類型' }).getByRole('button', { name: '利用' }).click()
@@ -192,10 +196,17 @@ test('沒有結果時依職業、搜尋條件、伺服器、星級列出生效�
   await page.getByRole('checkbox', { name: '1★' }).check()
   await page.getByRole('button', { name: '醫療', exact: true }).click()
   const empty = page.getByTestId('empty')
-  await expect(empty.getByRole('listitem')).toHaveText(['職業:醫療', '搜尋條件:施加-暈眩、施加-停頓、利用-停頓', '伺服器:陸服', '星級:1★'])
+  await expect(empty.getByRole('listitem')).toHaveText([
+    '職業:醫療',
+    `勢力:${kazimierz}、${abyssal}`,
+    '搜尋條件:施加-暈眩、施加-停頓、利用-停頓',
+    '伺服器:陸服',
+    '星級:1★',
+  ])
   await expect(empty).not.toContainText('分支')
 
-  // 只有職業條件:沒有「搜尋條件」這一項
+  await page.getByRole('button', { name: `移除 ${kazimierz}` }).click()
+  await page.getByRole('button', { name: `移除 ${abyssal}` }).click()
   await page.getByRole('button', { name: '移除 暈眩' }).click()
   await page.getByRole('button', { name: '移除 停頓' }).click()
   await page.getByRole('checkbox', { name: '1★' }).uncheck()
@@ -284,7 +295,7 @@ test('關鍵字面板:補充關鍵字叫推、拉;頂端沒有過濾欄位與清
 
   await push.click()
   await expect(page.getByTestId('chip')).toHaveCount(0)
-  await expect(page.getByText('點選關鍵字或職業開始搜尋')).toBeVisible()
+  await expect(page.getByText('點選關鍵字、職業或勢力開始搜尋')).toBeVisible()
 })
 
 test('效果類型判定:鉤索師特性的模組3 階段只算利用-拉;佩佩利用與反制異常狀態;酒神利用束縛', async ({ page }) => {
@@ -375,4 +386,74 @@ test('關鍵字面板依分組分行:控場第一行以減速開頭,沉默與失
   const rows = group('控場').locator('.kw-list')
   const top = async (i: number) => (await rows.nth(i).locator('.kw').first().boundingBox())!.y
   expect(await top(1)).toBeGreaterThan(await top(0))
+})
+
+test('技力回復:在增益分組緊接鼓舞之後;點了之後列出回技力的幹員,懸停看得到非官方定義', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const buff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '增益', exact: true }) })
+  const names = (await buff.locator('.kw-list').nth(2).locator('.kw').allTextContents()).map((t) => t.trim())
+  expect(names[names.indexOf('鼓舞') + 1]).toBe('技力回復')
+
+  await buff.getByRole('button', { name: '技力回復', exact: true }).click()
+  const cards = page.getByTestId('result-card')
+  for (const name of ['謎圖', '格勞克斯', '荒蕪拉普蘭德'])
+    await expect(cards.filter({ has: page.getByRole('heading', { name, exact: true }) })).toHaveCount(1)
+
+  await cards.first().locator('mark.hl').first().hover()
+  const tip = page.getByTestId('tip')
+  await expect(tip).toContainText('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+  await expect(tip).toContainText('非官方')
+})
+
+test('勢力分組在面板最下面,一行對應清單的一行;陸服有 S.E.E.S.,台服沒有', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const lastGroup = panel.locator('.kw-group').last()
+  await expect(lastGroup.getByRole('heading')).toHaveText('勢力')
+  const rows = lastGroup.locator('.kw-list')
+  const list = powerListRows()
+  await expect(rows).toHaveCount(list.length)
+  for (const [i, row] of list.entries()) await expect(rows.nth(i).getByRole('button')).toHaveText(row.map((id) => powerDisplayName(id)))
+  await expect(lastGroup.getByRole('button', { name: 'S.E.E.S.', exact: true })).toHaveCount(1)
+
+  await page.getByRole('radio', { name: '台服' }).click()
+  await expect(lastGroup.getByRole('heading')).toHaveText('勢力')
+  await expect(lastGroup.getByRole('button', { name: 'S.E.E.S.', exact: true })).toHaveCount(0)
+  await expect(lastGroup.getByRole('button', { name: powerDisplayName('sui', 'tw'), exact: true })).toHaveCount(1)
+})
+
+test('勢力 chip:點勢力出現 chip 與小卡,在職業 chip 之後;× 與面板勢力鈕連動', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const name = powerDisplayName('kazimierz')
+  const button = panel.getByRole('button', { name, exact: true })
+  const powerChips = page.getByTestId('power-chip')
+
+  await button.click()
+  await expect(button).toHaveAttribute('aria-pressed', 'true')
+  await expect(powerChips).toHaveText([new RegExp(name)])
+  await expect(powerChips.getByRole('button')).toHaveCount(1)
+  await expect(page.getByTestId('result-card').first()).toBeVisible()
+  await expect(page.getByTestId('entry')).toHaveCount(0)
+  expect(Number(/\d+/.exec((await page.getByTestId('result-count').textContent()) ?? '')?.[0])).toBeGreaterThan(0)
+
+  await page.getByRole('group', { name: '職業' }).getByRole('button', { name: '近衛', exact: true }).click()
+  const row = page.locator('.chips').filter({ has: powerChips })
+  await expect(row.locator('.chip')).toHaveText([/近衛/, new RegExp(name)])
+
+  await page.getByRole('button', { name: `移除 ${name}` }).click()
+  await expect(powerChips).toHaveCount(0)
+  await expect(button).toHaveAttribute('aria-pressed', 'false')
+  await button.click()
+  await expect(powerChips).toHaveText([new RegExp(name)])
+})
+
+test('勢力 chip 依面板順序排列:先點後面的勢力結果一樣', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const [first, second] = [powerDisplayName('kazimierz'), powerDisplayName('abyssal')]
+  await panel.getByRole('button', { name: second, exact: true }).click()
+  await panel.getByRole('button', { name: first, exact: true }).click()
+  await expect(page.getByTestId('power-chip')).toHaveText([new RegExp(first), new RegExp(second)])
 })

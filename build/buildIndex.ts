@@ -13,6 +13,7 @@ import type {
   IndexKeyword,
   IndexModule,
   IndexOperator,
+  IndexPower,
   IndexStage,
   IndexSummon,
   IndexText,
@@ -20,6 +21,7 @@ import type {
   OperatorFile,
   OperatorPowers,
   PerServer,
+  PowerId,
   Profession,
   Run,
   SearchIndex,
@@ -66,6 +68,27 @@ export interface SupplementKeyword {
   definition: string
 }
 
+/** 勢力的維護者清單裡附了顯示名稱的一項;沒附的伺服器用該伺服器的勢力名稱。 */
+export interface PowerListEntry {
+  id: PowerId
+  cn?: string
+  tw?: string
+}
+
+/** 勢力的維護者清單的一項:勢力 id,或附了顯示名稱的勢力。 */
+export type PowerListItem = PowerId | PowerListEntry
+
+/** 勢力的維護者清單:可選的勢力,由行組成(國家、組織、團隊各一行),順序就是面板順序。 */
+export type PowerList = PowerListItem[][]
+
+export function powerListEntry(item: PowerListItem): PowerListEntry {
+  return typeof item === 'string' ? { id: item } : item
+}
+
+export function listedPowerIds(list: PowerList): PowerId[] {
+  return list.flat().map((item) => powerListEntry(item).id)
+}
+
 /** 效果類型覆寫檔:以「敘述文字雜湊:關鍵字」為鍵,建置時優先於規則判定。types 為空表示複核後判定沒有效果類型。 */
 export type Overrides = Record<string, { types: EffectType[]; reviewed: boolean; note?: string }>
 
@@ -97,7 +120,8 @@ export interface BuildInput extends PerServer<RawServer> {
   /** 維護者對照:幹員 id → PRTS 頁名。陸服名與其他幹員重複(例如阿米婭的職業形態)時必填。 */
   prtsPages?: Record<string, string>
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
-  twPowerNames?: Record<string, string>
+  twPowerNames?: Record<PowerId, string>
+  powerList?: PowerList
 }
 
 export interface BuildOutput {
@@ -130,9 +154,13 @@ class Builder {
   readonly operatorFiles: OperatorFile[] = []
   readonly matchers: Record<Server, SupplementMatcher[]>
   readonly excluded: Set<string>
+  readonly listedPowerIds: PowerId[]
+  readonly cnPowerIdByName: Map<string, PowerId>
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
+    this.listedPowerIds = listedPowerIds(input.powerList ?? [])
+    this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
     const supplements = input.supplements ?? []
     this.matchers = {
       cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
@@ -172,6 +200,7 @@ class Builder {
       groups: this.groups(keywords),
       keywords,
       subProfessions: this.subProfessions(operators),
+      powerRows: this.powerRows(),
       operators,
     }
   }
@@ -252,6 +281,7 @@ class Builder {
       })
       for (const e of summonEntries) entries.push({ ...e, summon: summonId })
     }
+    this.checkUnlistedPowers(id, entries)
 
     const twEquips = this.input.tw?.uniequipTable?.equipDict ?? {}
     const indexModules: IndexModule[] = modules.map((m) => {
@@ -264,7 +294,7 @@ class Builder {
     if (twChar) powers.tw = this.powers('tw', twChar)
     this.operatorFiles.push({ id, inTw: !!twChar, modules: indexModules, summons, entries, attributes, powers })
 
-    return {
+    const op: IndexOperator = {
       id,
       name: twChar?.name ?? char.name,
       rarity: Number(char.rarity.replace('TIER_', '')),
@@ -277,6 +307,43 @@ class Builder {
       summons,
       entries: entries.filter((e) => e.stages.some((st) => hasHits(st.cn) || (st.tw && hasHits(st.tw)))),
     }
+    const listed = this.listedPowers(char, twChar)
+    if (listed) op.powers = listed
+    return op
+  }
+
+  listedPowers(char: RawCharacter, twChar: RawCharacter | undefined): PerServer<PowerId[]> | undefined {
+    const of = (c: RawCharacter) => {
+      const own = new Set([c, ...(c.subPower ?? [])].flatMap(powerIds))
+      return this.listedPowerIds.filter((id) => own.has(id))
+    }
+    const cn = of(char)
+    const tw = twChar ? of(twChar) : cn
+    if (cn.length === 0 && tw.length === 0) return undefined
+    return tw.join() === cn.join() ? { cn } : { cn, tw }
+  }
+
+  checkUnlistedPowers(id: string, entries: IndexEntry[]) {
+    for (const e of entries) {
+      if (e.kind === 'trait') continue
+      const source = `${e.summon ? `召喚物 ${e.summon} ` : ''}${e.kind === 'talent' ? '天賦' : '技能'}${e.no}`
+      for (const stage of e.stages)
+        for (const [, name] of plainText(stage.cn.runs).matchAll(BRACKETED)) {
+          const powerId = this.cnPowerIdByName.get(name)
+          if (powerId && !this.listedPowerIds.includes(powerId)) this.warnOnce(`幹員 ${id} ${source}:【${name}】是勢力清單外的勢力 ${powerId}`)
+        }
+    }
+  }
+
+  powerRows(): IndexPower[][] {
+    return (this.input.powerList ?? []).map((row) =>
+      row.map((item) => {
+        const { id, cn, tw } = powerListEntry(item)
+        const name: PerServer<string> = { cn: cn ?? this.powerName('cn', id) }
+        if (this.input.tw) name.tw = tw ?? this.powerName('tw', id)
+        return { id, name }
+      }),
+    )
   }
 
   powers(server: Server, char: RawCharacter): OperatorPowers {
@@ -284,7 +351,7 @@ class Builder {
     return { power: names(char), hiddenPowers: (char.subPower ?? []).map(names) }
   }
 
-  powerName(server: Server, id: string): string {
+  powerName(server: Server, id: PowerId): string {
     if (server === 'tw') {
       const name = this.input.twPowerNames?.[id]
       if (name) return name
@@ -607,7 +674,7 @@ function operatorAttributes(char: RawCharacter): OperatorAttributes {
   }
 }
 
-function powerIds(p: RawPower): string[] {
+function powerIds(p: RawPower): PowerId[] {
   return [p.nationId, p.groupId, p.teamId].filter((id): id is string => !!id)
 }
 
@@ -708,6 +775,7 @@ function skillValues(level: RawSkillLevel) {
 }
 
 const NUMBER = /\d+(?:\.\d+)?/g
+const BRACKETED = /【([^】]+)】/g
 
 /** 比較陸服與台服文字是否「一致」:術語順序、數值、補充關鍵字都相同。 */
 function signature(runs: Run[]): string {

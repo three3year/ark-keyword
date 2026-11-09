@@ -46,3 +46,66 @@ describe('已知警告', () => {
     expect(diffWarnings(warningsOf(['使敌人<$ba.cold>寒冷\n持续3秒']), warnings)).toEqual({ newWarnings: [], resolvedWarnings: [] })
   })
 })
+
+describe('清單外勢力的警告', () => {
+  const POWER_NAMES = { kazimierz: '卡西米尔', siracusa: '叙拉古' }
+
+  function powerWarnings(spec: { talent?: string; skill?: string; trait?: string }): string[] {
+    const skills = spec.skill ? [basicSkill('sk_x_1', '技', { description: spec.skill })] : []
+    const cn = server({
+      terms: COMMON_TERMS,
+      powerNames: POWER_NAMES,
+      operators: {
+        char_001_x: operator({
+          name: '甲',
+          trait: spec.trait,
+          skills: skills.map((s) => s.skillId),
+          talents: spec.talent ? [{ name: '天賦', description: spec.talent }] : [],
+        }),
+      },
+      skills,
+    })
+    return buildIndex({ cn, powerList: [['kazimierz']] }).warnings
+  }
+
+  test('天賦的【勢力名】不在清單時發警告,寫出幹員、敘述來源與勢力名', () => {
+    expect(powerWarnings({ talent: '编入【叙拉古】干员时攻击力+10%' })).toEqual(['幹員 char_001_x 天賦1:【叙拉古】是勢力清單外的勢力 siracusa'])
+  })
+
+  test('技能的【勢力名】不在清單時也發警告', () => {
+    expect(powerWarnings({ skill: '【叙拉古】干员攻击力+10%' })).toEqual(['幹員 char_001_x 技能1:【叙拉古】是勢力清單外的勢力 siracusa'])
+  })
+
+  test('清單內的勢力不發警告', () => {
+    expect(powerWarnings({ talent: '编入【卡西米尔】干员时攻击力+10%', skill: '【卡西米尔】干员攻击力+10%' })).toEqual([])
+  })
+
+  test('特性中的【勢力名】不檢查', () => {
+    expect(powerWarnings({ trait: '【叙拉古】干员攻击力+10%' })).toEqual([])
+  })
+
+  test('【】內不是勢力名稱的詞不發警告', () => {
+    expect(powerWarnings({ talent: '编入【萨卡兹】干员时攻击力+10%', skill: '【狙击】干员攻击速度+10' })).toEqual([])
+  })
+
+  test('召喚物的天賦或技能也檢查', () => {
+    const cn = server({
+      terms: COMMON_TERMS,
+      powerNames: POWER_NAMES,
+      operators: {
+        char_002_y: operator({ name: '乙', skills: ['sk_y_1'], skillTokens: { sk_y_1: 'token_002_y' }, tokens: ['token_002_y'] }),
+        token_002_y: operator({
+          name: '小乙',
+          profession: 'TOKEN',
+          skills: ['sktok_y_1'],
+          talents: [{ name: '小天賦', description: '周围【叙拉古】干员攻击力+10%' }],
+        }),
+      },
+      skills: [basicSkill('sk_y_1', '召唤', { description: '召唤小乙' }), basicSkill('sktok_y_1', '小技', { description: '【叙拉古】干员防御力+10%' })],
+    })
+    expect(buildIndex({ cn, powerList: [['kazimierz']] }).warnings).toEqual([
+      '幹員 char_002_y 召喚物 token_002_y 技能1:【叙拉古】是勢力清單外的勢力 siracusa',
+      '幹員 char_002_y 召喚物 token_002_y 天賦1:【叙拉古】是勢力清單外的勢力 siracusa',
+    ])
+  })
+})

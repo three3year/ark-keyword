@@ -551,6 +551,12 @@ input:focus-visible {
   border-style: dashed;
 }
 
+.kw.power.on {
+  background: var(--profession);
+  border-color: var(--profession);
+  color: var(--surface);
+}
+
 /* ---- 搜尋條件 chip ---- */
 
 .chips {
@@ -579,14 +585,15 @@ input:focus-visible {
   font-weight: 600;
 }
 
-/* 職業 chip:和搜尋條件 chip 同形,換成職業色;沒有類型鈕與定義 */
-.profession-chip {
+.profession-chip,
+.power-chip {
   border-color: var(--profession);
   background: var(--profession-soft);
   color: var(--profession);
 }
 
-.profession-name {
+.profession-name,
+.power-name {
   font-weight: 600;
 }
 

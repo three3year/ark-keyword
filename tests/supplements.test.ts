@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { type SupplementKeyword, buildIndex } from '../build/buildIndex'
+import { type BuildInput, type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
 import { keywordGroups, query } from '../src/core/query'
+import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
 
 const supplements: SupplementKeyword[] = [
@@ -8,6 +9,13 @@ const supplements: SupplementKeyword[] = [
   { id: 'truedmg', name: '真實傷害', cn: ['真实伤害'], tw: ['真實傷害'], definition: '無視防禦與法術抗性的傷害' },
   { id: 'lift', name: '浮起', cn: ['浮空'], tw: ['浮空'], definition: '測試用' },
 ]
+
+/** 建一次索引,把待複核的配對全判為施加,再帶著這份覆寫重建。 */
+function buildWithPendingReviewedAsApply(input: BuildInput) {
+  const first = buildIndex(input)
+  const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
+  return buildIndex({ ...input, overrides })
+}
 
 function fixture(descriptions: Record<string, string>) {
   const operators = Object.fromEntries(Object.keys(descriptions).map((name, i) => [`char_${500 + i}_s`, operator({ name, skills: [`sk_${i}`] })]))
@@ -51,6 +59,35 @@ describe('補充關鍵字', () => {
       { 'ba.cold': ['apply'], 'sup.knockback': ['apply'] },
       { 'ba.cold': ['apply'] },
     ])
+  })
+
+  describe('技力回復(維護者清單的比對字串)', () => {
+    const cases: [name: string, cn: string, tw: string][] = [
+      ['瞬間回復', '攻击敌人时额外回复2点技力', '攻擊敵人時額外回復2點技力'],
+      ['擊殺回復', '造成致命伤害时使敌人保留1点生命并使其重伤（击杀者技力+2）', '造成致命傷害時使敵人保留1點生命並使其重傷（擊殺者技力+2）'],
+      ['回復速度', '攻击范围内存在敌人时技力自然恢复速度+0.2/秒', '攻擊範圍內存在敵人時技力自然恢復速度+0.2/秒'],
+      ['初始技力', '编入队伍时所有【叙拉古】干员的初始技力+5', '編入隊伍時所有【敘拉古】幹員的初始技力+5'],
+      ['只提技力', '技力满时可使用装备应变来开启技能', '技力滿時可使用裝備應變來開啟技能'],
+    ]
+    function servers() {
+      const operators = (style: 'array' | 'object') =>
+        Object.fromEntries(cases.map(([name], i) => [`char_700_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
+      const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
+      return {
+        cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
+        tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
+      }
+    }
+
+    test.each(['cn', 'tw'] as const)('%s:瞬間回復、回復速度提升、初始技力提高命中,只提到技力的不命中', (srv) => {
+      const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
+      const results = query(index, { conditions: applying('sup.sprecovery'), server: srv })
+      expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復'].sort())
+      const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
+      expect(keyword.name).toBe('技力回復')
+      expect(keyword.unofficial).toBe(true)
+      expect(plain(keyword.definition)).toBe('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+    })
   })
 
   test('面板依清單排列,定義標為非官方', () => {

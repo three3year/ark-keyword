@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { loadIndex } from './core/loadIndex'
-import { availableTypes, branchName, defaultType, filterOptions, footerItems, query, startsSearch } from './core/query'
+import { availableTypes, branchName, defaultType, filterOptions, footerItems, powerName, query, startsSearch } from './core/query'
 import {
   EFFECT_TYPE_LABELS,
   EFFECT_TYPES,
   PROFESSION_LABELS,
   PROFESSIONS,
+  powersInListOrder,
   type EffectType,
   type IndexKeyword,
+  type PowerId,
   type Profession,
   type ResultOperator,
   type SearchCondition,
@@ -58,9 +60,14 @@ const rarities = ref<number[]>([])
 const professions = ref<Profession[]>([])
 /** 職業條件依遊戲內職業順序,不依點選先後。 */
 const sortedProfessions = computed(() => PROFESSIONS.filter((p) => professions.value.includes(p)))
-const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value }))
+const powers = ref<PowerId[]>([])
+const sortedPowers = computed(() =>
+  (index.value ? powersInListOrder(index.value) : []).map((p) => p.id).filter((id) => powers.value.includes(id)),
+)
+const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value, powers: powers.value }))
 // 窄螢幕上關鍵字面板收合成抽屜
 const drawerOpen = ref(false)
+const drawerCount = computed(() => selected.value.length + powers.value.length)
 
 onMounted(async () => {
   try {
@@ -80,6 +87,7 @@ const results = computed(() =>
         server: server.value,
         rarities: rarities.value,
         professions: professions.value,
+        powers: powers.value,
       })
     : [],
 )
@@ -97,6 +105,7 @@ function hasData(id: string, type: EffectType): boolean {
 const emptyConditions = computed(() => {
   const list: string[] = []
   if (professions.value.length) list.push(`職業:${sortedProfessions.value.map((p) => PROFESSION_LABELS[p]).join('、')}`)
+  if (powers.value.length) list.push(`勢力:${sortedPowers.value.map(powerLabel).join('、')}`)
   if (conditions.value.length) list.push(`搜尋條件:${conditions.value.map((c) => `${EFFECT_TYPE_LABELS[c.type]}-${keywordName(c.keyword)}`).join('、')}`)
   list.push(`伺服器:${server.value === 'tw' ? '台服' : '陸服'}`)
   if (rarities.value.length) list.push(`星級:${[...rarities.value].sort((a, b) => b - a).map((r) => `${r}★`).join('、')}`)
@@ -122,6 +131,14 @@ function remove(id: string) {
 
 function removeProfession(p: Profession) {
   professions.value = professions.value.filter((x) => x !== p)
+}
+
+function togglePower(id: PowerId) {
+  powers.value = powers.value.includes(id) ? powers.value.filter((x) => x !== id) : [...powers.value, id]
+}
+
+function powerLabel(id: PowerId): string {
+  return index.value ? powerName(index.value, server.value, id) : id
 }
 
 /** chip 上的類型鈕:切換該類型;關掉最後一顆等於移除 chip。 */
@@ -267,7 +284,7 @@ onBeforeUnmount(() => {
     </header>
     <!-- 窄螢幕上浮在右下角;抽屜打開時隱藏 -->
     <button v-if="index" v-show="!drawerOpen" class="drawer-btn" @click.stop="drawerOpen = true">
-      關鍵字<template v-if="selected.length">({{ selected.length }})</template>
+      關鍵字<template v-if="drawerCount">({{ drawerCount }})</template>
     </button>
     <p v-if="error" class="error">{{ error }}</p>
     <main v-else-if="index" class="layout">
@@ -277,15 +294,25 @@ onBeforeUnmount(() => {
           <strong>關鍵字</strong>
           <button class="btn" @click="drawerOpen = false">完成</button>
         </div>
-        <KeywordPanel :index="index" :server="server" :selected="selected" @toggle="toggle" />
+        <KeywordPanel
+          :index="index"
+          :server="server"
+          :selected="selected"
+          :powers="powers"
+          @toggle="toggle"
+          @toggle-power="togglePower"
+        />
       </aside>
       <section class="results">
         <FilterBar v-model:rarities="rarities" v-model:professions="professions" :options="options" />
-        <!-- 職業 chip 一行在上、搜尋條件 chip 在下 -->
-        <div v-if="sortedProfessions.length > 0" class="chips">
+        <div v-if="sortedProfessions.length > 0 || powers.length > 0" class="chips">
           <span v-for="p in sortedProfessions" :key="p" class="chip profession-chip" data-testid="profession-chip">
             <span class="profession-name">{{ PROFESSION_LABELS[p] }}</span>
             <button class="chip-x" :aria-label="`移除 ${PROFESSION_LABELS[p]}`" @click.stop="removeProfession(p)">×</button>
+          </span>
+          <span v-for="p in sortedPowers" :key="p" class="chip power-chip" data-testid="power-chip">
+            <span class="power-name">{{ powerLabel(p) }}</span>
+            <button class="chip-x" :aria-label="`移除 ${powerLabel(p)}`" @click.stop="togglePower(p)">×</button>
           </span>
         </div>
         <div v-if="selection.length > 0" class="chips">
@@ -310,7 +337,7 @@ onBeforeUnmount(() => {
             <button class="chip-x" :aria-label="`移除 ${keywordName(s.keyword)}`" @click.stop="remove(s.keyword)">×</button>
           </span>
         </div>
-        <p v-if="!searching" class="hint">點選關鍵字或職業開始搜尋</p>
+        <p v-if="!searching" class="hint">點選關鍵字、職業或勢力開始搜尋</p>
         <template v-else>
           <div class="result-meta">
             <span data-testid="result-count">共 {{ results.length }} 位幹員</span>
@@ -322,7 +349,6 @@ onBeforeUnmount(() => {
               <li v-for="c in emptyConditions" :key="c">{{ c }}</li>
             </ul>
           </div>
-          <!-- 只有職業條件時結果卡只有卡頭:排成多欄的小卡 -->
           <div class="result-list" :class="{ compact: conditions.length === 0 }" data-testid="result-list">
             <ResultCard
               v-for="op in results"

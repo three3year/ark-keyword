@@ -5,7 +5,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { prepareAvatars, prepareSkillIcons } from './images'
-import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, skillIconId, skillIconPath, type SupplementKeyword } from './buildIndex'
+import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, type PowerList, skillIconId, skillIconPath, type SupplementKeyword } from './buildIndex'
 import type { RawServer } from './raw'
 import { diffWarnings, KNOWN_WARNINGS, NEW_WARNINGS, RESOLVED_WARNINGS } from './warnings'
 import { DATA_SOURCES, rawBase } from '../src/core/sources'
@@ -96,8 +96,9 @@ async function main() {
   const excludedTerms = await readJson<string[]>(join(ROOT, 'data', 'excluded-terms.json'))
   const prtsPages = await readJson<Record<string, string>>(join(ROOT, 'data', 'prts-pages.json'))
   const twPowerNames = await readJson<Record<string, string>>(join(ROOT, 'data', 'tw-power-names.json'))
+  const powerList = await readJson<PowerList>(join(ROOT, 'data', 'power-list.json'))
   const knownWarnings = await readJson<string[]>(KNOWN_WARNINGS)
-  const { index, operatorFiles, warnings, pending } = buildIndex({ cn, tw, groups, supplements, overrides, excludedTerms, prtsPages, twPowerNames })
+  const { index, operatorFiles, warnings, pending } = buildIndex({ cn, tw, groups, supplements, overrides, excludedTerms, prtsPages, twPowerNames, powerList })
 
   // 頭像:職業形態(阿米婭)沒有專屬頭像時改用預設形態
   const formDefault = new Map<string, string>()
