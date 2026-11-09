@@ -48,7 +48,7 @@ import type {
   RawTalentCandidate,
   RawUnlockCondition,
 } from './raw'
-import { parseRichText, plainText, push, toValues } from './richText'
+import { isKeywordTerm, parseRichText, plainText, push, toValues } from './richText'
 import { type SupplementMatcher, markSupplements } from './supplements'
 
 function dataVersion(raw: RawServer): DataVersion {
@@ -67,6 +67,14 @@ export interface SupplementKeyword {
   /** 繁中比對字串(台服文字)。 */
   tw: string[]
   definition: string
+}
+
+/** 維護者清單「術語比對清單」:遊戲漏標時,也以純文字比對補標成這個術語(名稱與定義用官方的)。 */
+export interface TermMatch {
+  /** 術語 id,必須是會成為關鍵字的戰鬥術語。 */
+  id: string
+  cn: string[]
+  tw: string[]
 }
 
 /** 勢力的維護者清單裡附了顯示名稱的一項;沒附的伺服器用該伺服器的勢力名稱。 */
@@ -115,6 +123,7 @@ export interface PendingReview {
 export interface BuildInput extends PerServer<RawServer> {
   groups?: KeywordGroup[]
   supplements?: SupplementKeyword[]
+  termMatches?: TermMatch[]
   overrides?: Overrides
   /** 維護者清單:談不上效果類型、不當關鍵字的術語 id(隊伍名等);敘述中顯示為一般文字。 */
   excludedTerms?: string[]
@@ -164,11 +173,22 @@ class Builder {
     this.excluded = new Set(input.excludedTerms)
     this.listedPowerIds = listedPowerIds(input.powerList ?? [])
     this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
-    const supplements = input.supplements ?? []
+    // 術語比對清單與補充關鍵字合在同一輪比對
+    const matchers = [...(input.supplements ?? []).map((s) => ({ ...s, id: supplementId(s) })), ...this.validTermMatches()]
     this.matchers = {
-      cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
-      tw: supplements.map((s) => ({ id: supplementId(s), strings: s.tw })),
+      cn: matchers.map((m) => ({ id: m.id, strings: m.cn })),
+      tw: matchers.map((m) => ({ id: m.id, strings: m.tw })),
     }
+  }
+
+  /** 術語比對清單裡會成為關鍵字的戰鬥術語;其他的發警告、不比對,非關鍵字的術語不能經由補標變成關鍵字。 */
+  validTermMatches(): TermMatch[] {
+    const known = (id: string) => !!(this.input.cn.gamedataConst.termDescriptionDict[id] ?? this.input.tw?.gamedataConst.termDescriptionDict[id])
+    return (this.input.termMatches ?? []).filter((m) => {
+      if (isKeywordTerm(m.id, this.excluded) && known(m.id)) return true
+      this.warn(`術語比對清單的 ${m.id} 不是會成為關鍵字的戰鬥術語,不比對`)
+      return false
+    })
   }
 
   raw(server: Server): RawServer | undefined {

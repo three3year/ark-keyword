@@ -2,6 +2,7 @@
 // 掃的是建置剛標好的幹員檔敘述;術語用兩服的官方名稱,補充關鍵字用稽核種子字清單。
 import type { IndexEntry, IndexStage, OperatorFile, Server } from '../src/core/types'
 import type { BuildInput } from './buildIndex'
+import { isKeywordTerm } from './richText'
 
 /** 維護者清單:補充關鍵字 id(不含 sup.)→ 稽核種子字(兩服的字寫在一起)。 */
 export type AuditSeeds = Record<string, string[]>
@@ -39,11 +40,6 @@ interface AuditText {
 
 const CONTEXT = 8
 const OWN_SIDE = /·我方$/
-
-/** 會成為關鍵字的戰鬥術語:ba. 開頭、不在不當關鍵字的術語清單裡。 */
-function isKeywordTerm(id: string, excluded: Set<string>): boolean {
-  return id.startsWith('ba.') && !excluded.has(id)
-}
 
 /** 稽核的術語與補充關鍵字;種子字清單與補充關鍵字清單對不上時發警告。 */
 export function auditTargets(input: BuildInput, warn: (message: string) => void): AuditTarget[] {
