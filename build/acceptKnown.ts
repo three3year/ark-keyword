@@ -14,7 +14,7 @@ async function main() {
   const resolved = new Set(await readList<string>(list.resolved))
   const next = [...new Set([...known.filter((k) => !resolved.has(k)), ...added])]
   await writeFile(list.known, JSON.stringify(next, null, 2) + '\n')
-  console.log(`${list.name}:加入 ${added.length} 則、移除 ${resolved.size} 則,共 ${next.length} 則`)
+  console.log(`已知${list.noun}:加入 ${added.length} 則、移除 ${resolved.size} 則,共 ${next.length} 則`)
 }
 
 main().catch((err) => {

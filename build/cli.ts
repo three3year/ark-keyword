@@ -3,19 +3,18 @@
 //   npm run build-index:offline    沿用 .cache/raw 裡已下載的資料
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { prepareAvatars, prepareSkillIcons } from './images'
 import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, type PowerList, skillIconId, skillIconPath, type SupplementKeyword, type TermMatch } from './buildIndex'
 import type { AuditSeeds } from './audit'
 import type { RawServer } from './raw'
-import { diffKnown, KNOWN_LISTS } from './known'
+import { diffKnown, KNOWN_LISTS, type KnownList } from './known'
+import { REVIEW_DIR, ROOT } from './paths'
 import { DATA_SOURCES, rawBase } from '../src/core/sources'
 
-const ROOT = join(import.meta.dirname, '..')
 const CACHE = join(ROOT, '.cache', 'raw')
 const OUT_INDEX = join(ROOT, 'public', 'data', 'index.json')
 const OUT_OPERATORS = join(ROOT, 'public', 'data', 'operators')
-const REVIEW_DIR = join(ROOT, 'review')
 
 const SOURCES = {
   cn: {
@@ -100,8 +99,6 @@ async function main() {
   const twPowerNames = await readJson<Record<string, string>>(join(ROOT, 'data', 'tw-power-names.json'))
   const powerList = await readJson<PowerList>(join(ROOT, 'data', 'power-list.json'))
   const auditSeeds = await readJson<AuditSeeds>(join(ROOT, 'data', 'audit-seeds.json'))
-  const knownWarnings = await readJson<string[]>(KNOWN_LISTS.warnings.known)
-  const knownSuspects = await readJson<string[]>(KNOWN_LISTS.suspects.known)
   const { index, operatorFiles, warnings, pending, suspects } = buildIndex({ cn, tw, groups, supplements, termMatches, overrides, excludedTerms, prtsPages, twPowerNames, powerList, auditSeeds })
 
   // 頭像:職業形態(阿米婭)沒有專屬頭像時改用預設形態
@@ -140,33 +137,28 @@ async function main() {
   console.log(`幹員檔:${files.size} 個;技能圖示:${icons.size} 個`)
 
   await mkdir(REVIEW_DIR, { recursive: true })
-  await writeFile(join(REVIEW_DIR, 'build-warnings.txt'), warnings.join('\n') + '\n')
   await writeFile(join(REVIEW_DIR, 'pending-review.json'), JSON.stringify(pending, null, 1))
   console.log(`待複核:${pending.length} 個配對(review/pending-review.json)`)
-  await writeFile(join(REVIEW_DIR, 'suspects.json'), JSON.stringify(suspects, null, 1))
-  const suspectDiff = diffKnown(suspects.map((s) => s.key), knownSuspects)
-  const addedKeys = new Set(suspectDiff.added)
-  const newSuspects = suspects.filter((s) => addedKeys.has(s.key))
-  await writeFile(KNOWN_LISTS.suspects.added, JSON.stringify(newSuspects, null, 1) + '\n')
-  await writeFile(KNOWN_LISTS.suspects.resolved, JSON.stringify(suspectDiff.resolved, null, 2) + '\n')
-  console.log(`疑似漏標:共 ${suspects.length} 則(review/suspects.json)`)
-  console.log(`  新的疑似漏標:${newSuspects.length} 則(review/new-suspects.json)`)
-  console.log(`  已消失的已知疑似漏標:${suspectDiff.resolved.length} 則(review/resolved-suspects.json)`)
-  printFirst('⚠ 新的疑似漏標前 10 則:', newSuspects.map((s) => `${s.key}(${s.where})`))
-
-  const warningDiff = diffKnown(warnings, knownWarnings)
-  await writeFile(KNOWN_LISTS.warnings.added, JSON.stringify(warningDiff.added, null, 2) + '\n')
-  await writeFile(KNOWN_LISTS.warnings.resolved, JSON.stringify(warningDiff.resolved, null, 2) + '\n')
-  console.log(`警告:共 ${warnings.length} 則(review/build-warnings.txt)`)
-  console.log(`  新警告:${warningDiff.added.length} 則(review/new-warnings.json)`)
-  console.log(`  已消失的已知警告:${warningDiff.resolved.length} 則(review/resolved-warnings.json)`)
-  printFirst('⚠ 新警告前 10 則:', warningDiff.added)
+  await writeFile(KNOWN_LISTS.suspects.all, JSON.stringify(suspects, null, 1))
+  await reportKnown(KNOWN_LISTS.suspects, suspects, (s) => s.key, (s) => `${s.key}(${s.where})`)
+  await writeFile(KNOWN_LISTS.warnings.all, warnings.join('\n') + '\n')
+  await reportKnown(KNOWN_LISTS.warnings, warnings, (w) => w, (w) => w)
 }
 
-function printFirst(title: string, lines: string[]) {
-  if (lines.length === 0) return
-  console.warn(title)
-  for (const line of lines.slice(0, 10)) console.warn('  ' + line)
+/** 與已知清單比對:寫出新出現與已消失的項目,印出摘要與前 10 則新項目。 */
+async function reportKnown<T>(list: KnownList, items: T[], keyOf: (item: T) => string, describe: (item: T) => string) {
+  const diff = diffKnown(items.map(keyOf), await readJson<string[]>(list.known))
+  const addedKeys = new Set(diff.added)
+  const added = items.filter((item) => addedKeys.has(keyOf(item)))
+  await writeFile(list.added, JSON.stringify(added, null, 2) + '\n')
+  await writeFile(list.resolved, JSON.stringify(diff.resolved, null, 2) + '\n')
+  const shown = (path: string) => `review/${basename(path)}`
+  console.log(`${list.noun}:共 ${items.length} 則(${shown(list.all)})`)
+  console.log(`  ${list.newNoun}:${added.length} 則(${shown(list.added)})`)
+  console.log(`  已消失的已知${list.noun}:${diff.resolved.length} 則(${shown(list.resolved)})`)
+  if (added.length === 0) return
+  console.warn(`⚠ ${list.newNoun}前 10 則:`)
+  for (const item of added.slice(0, 10)) console.warn('  ' + describe(item))
 }
 
 main().catch((err) => {

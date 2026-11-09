@@ -91,7 +91,7 @@ npm run build-index:offline
    npm run build-index:offline
    ```
 
-完成:建置摘要的新疑似漏標與已消失的已知疑似漏標都是 0 則,`review/pending-review.json` 是空陣列。
+完成:建置摘要的新疑似漏標與已消失的已知疑似漏標都是 0 則,新警告仍是 0 則(補上的標記可能讓兩服文字變一致,冒出台服覆寫差異警告;有就回第 5 步處理),`review/pending-review.json` 是空陣列。
 
 ## 7. 測試
 

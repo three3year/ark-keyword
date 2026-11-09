@@ -32,7 +32,7 @@ import type {
   Trigger,
 } from '../src/core/types'
 import { EFFECT_TYPE_LABELS, PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
-import { type AuditSeeds, auditSuspects, auditTargets, type Suspect } from './audit'
+import { type AuditSeeds, auditSuspects, auditTargets, type Suspect, whereOf } from './audit'
 import { ruleEffectTypes } from './effectType'
 import { withPotentialBonus } from './potential'
 import type {
@@ -49,7 +49,7 @@ import type {
   RawUnlockCondition,
 } from './raw'
 import { isKeywordTerm, parseRichText, plainText, push, toValues } from './richText'
-import { type SupplementMatcher, markSupplements } from './supplements'
+import { markTextMatches, type TextMatcher } from './textMatch'
 
 function dataVersion(raw: RawServer): DataVersion {
   return { version: raw.gamedataConst.dataVersion ?? '', downloadedAt: raw.downloadedAt }
@@ -164,26 +164,28 @@ class Builder {
   }
   readonly pending = new Map<string, PendingReview>()
   readonly operatorFiles: OperatorFile[] = []
-  readonly matchers: Record<Server, SupplementMatcher[]>
+  readonly matchers: Record<Server, TextMatcher[]>
   readonly excluded: Set<string>
+  readonly keywordTerms: Set<string>
   readonly listedPowerIds: PowerId[]
   readonly cnPowerIdByName: Map<string, PowerId>
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
+    const dicts = [input.cn.gamedataConst.termDescriptionDict, input.tw?.gamedataConst.termDescriptionDict ?? {}]
+    this.keywordTerms = new Set(dicts.flatMap((d) => Object.keys(d)).filter((id) => isKeywordTerm(id, this.excluded)))
     this.listedPowerIds = listedPowerIds(input.powerList ?? [])
     this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
-    const matchers = [...(input.supplements ?? []).map((s) => ({ ...s, id: supplementId(s) })), ...this.validTermMatches()]
+    const matchers = [...(input.supplements ?? []).map((s) => ({ ...s, id: supplementId(s) })), ...this.keywordTermMatches()]
     this.matchers = {
       cn: matchers.map((m) => ({ id: m.id, strings: m.cn })),
       tw: matchers.map((m) => ({ id: m.id, strings: m.tw })),
     }
   }
 
-  validTermMatches(): TermMatch[] {
-    const known = (id: string) => !!(this.input.cn.gamedataConst.termDescriptionDict[id] ?? this.input.tw?.gamedataConst.termDescriptionDict[id])
+  keywordTermMatches(): TermMatch[] {
     return (this.input.termMatches ?? []).filter((m) => {
-      if (isKeywordTerm(m.id, this.excluded) && known(m.id)) return true
+      if (this.keywordTerms.has(m.id)) return true
       this.warn(`術語比對清單的 ${m.id} 不是會成為關鍵字的戰鬥術語,不比對`)
       return false
     })
@@ -413,7 +415,7 @@ class Builder {
       const stages: IndexStage[] = []
       for (const { kind, index } of skillStages(skill)) {
         const level = (server: Server) => this.raw(server)?.skillTable[skillId]?.levels[index]
-        const stage = this.stage({ kind }, `${ownerId} 技能${no} ${kind}`, (server) => {
+        const stage = this.stage(ownerId, { kind: 'skill', no }, { kind }, (server) => {
           const lv = level(server)
           if (!lv) return undefined
           return this.parse(lv.description ?? '', skillValues(lv), `${serverPrefix(server)}技能 ${skillId} ${kind}`)
@@ -452,13 +454,13 @@ class Builder {
       if (!raw) return undefined
       return this.parse(raw, toValues(top?.blackboard), `${serverPrefix(server)}幹員 ${id} 特性`)
     }
-    const base = this.stage({ kind: 'base' }, `${id} 特性`, traitRuns)
+    const base = this.stage(id, { kind: 'trait' }, { kind: 'base' }, traitRuns)
     if (!base) return undefined
     const stages: IndexStage[] = [base]
     for (const m of modules) {
       const trait = m.trait
       if (!trait) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 特性 模組3 ${m.equip.uniEquipId}`, (server) => {
+      const stage = this.stage(id, { kind: 'trait' }, { kind: 'module', module: m.equip.uniEquipId }, (server) => {
         if (server !== 'cn') return undefined
         const where = `模組 ${m.equip.uniEquipId} 特性`
         const values = toValues(trait.blackboard)
@@ -478,7 +480,7 @@ class Builder {
     const visible = (server: Server) =>
       (this.char(server, id)?.talents?.[index]?.candidates ?? []).filter((c) => !c.isHideTalent && c.description)
     const stages: IndexStage[] = []
-    const base = this.stage({ kind: 'base' }, `${id} 天賦${no}`, (server) => {
+    const base = this.stage(id, { kind: 'talent', no }, { kind: 'base' }, (server) => {
       const candidates = visible(server)
       if (candidates.length === 0) return undefined
       return this.talentRuns(candidates, (c) => c.description!, `${serverPrefix(server)}幹員 ${id} 天賦${no}`)
@@ -487,7 +489,7 @@ class Builder {
     for (const m of modules) {
       const rewrite = m.talents.get(index)
       if (!rewrite) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 天賦${no} 模組3 ${m.equip.uniEquipId}`, (server) =>
+      const stage = this.stage(id, { kind: 'talent', no }, { kind: 'module', module: m.equip.uniEquipId }, (server) =>
         server === 'cn' ? this.talentRuns(rewrite, (c) => c.upgradeDescription!, `模組 ${m.equip.uniEquipId} 天賦${no}`) : undefined,
       )
       if (stage) stages.push(stage)
@@ -507,7 +509,7 @@ class Builder {
     for (const m of modules) {
       const added = m.talents.get(-1)
       if (!added) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 天賦${no} 模組3 ${m.equip.uniEquipId}`, (server) =>
+      const stage = this.stage(id, { kind: 'talent', no }, { kind: 'module', module: m.equip.uniEquipId }, (server) =>
         server === 'cn' ? this.talentRuns(added, (c) => c.upgradeDescription!, `模組 ${m.equip.uniEquipId} 新增天賦`) : undefined,
       )
       if (!stage) continue
@@ -567,13 +569,14 @@ class Builder {
   }
 
   /** 以產生器分別產生陸服與台服文字,組成一個階段。陸服沒有這段敘述時回傳 undefined。 */
-  stage(head: Pick<IndexStage, 'kind' | 'module'>, where: string, produce: Producer): IndexStage | undefined {
+  stage(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, head: Pick<IndexStage, 'kind' | 'module'>, produce: Producer): IndexStage | undefined {
     const cnRuns = produce('cn')
     if (!cnRuns) return undefined
+    const where = whereOf(owner, entry, head)
     const stage: IndexStage = { ...head, cn: this.finish(cnRuns, 'cn', where) }
     const twRuns = this.input.tw ? produce('tw') : undefined
     if (twRuns) {
-      const marked = markSupplements(twRuns, this.matchers.tw)
+      const marked = markTextMatches(twRuns, this.matchers.tw)
       if (signature(marked) === signature(stage.cn.runs)) {
         // 與陸服一致:沿用陸服的效果類型,陸服模式可改顯示繁中
         stage.tw = { runs: marked, hits: structuredClone(stage.cn.hits) }
@@ -602,7 +605,7 @@ class Builder {
    * (覆寫檔優先,否則用規則判定,判定不出時為空清單;覆寫檔沒有的配對列入待複核清單)。
    */
   finish(parsed: Run[], server: Server, where: string): IndexText {
-    const runs = markSupplements(parsed, this.matchers[server])
+    const runs = markTextMatches(parsed, this.matchers[server])
     const text = plainText(runs)
     const hash = textHash(text)
     const hits: IndexText['hits'] = {}
@@ -830,7 +833,7 @@ function textHash(text: string): string {
 export function buildIndex(input: BuildInput): BuildOutput {
   const builder = new Builder(input)
   const index = builder.build()
-  const suspects = auditSuspects(builder.operatorFiles, auditTargets(input, builder.warn))
+  const suspects = auditSuspects(builder.operatorFiles, auditTargets(input, builder.keywordTerms, builder.warn))
   return { index, operatorFiles: builder.operatorFiles, warnings: builder.warnings, pending: [...builder.pending.values()], suspects }
 }
 

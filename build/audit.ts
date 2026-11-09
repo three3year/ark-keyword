@@ -1,6 +1,5 @@
 import type { IndexEntry, IndexStage, OperatorFile, Server } from '../src/core/types'
 import type { BuildInput } from './buildIndex'
-import { isKeywordTerm } from './richText'
 
 /** 維護者清單:補充關鍵字 id(不含 sup.)→ 稽核種子字(兩服的字寫在一起)。 */
 export type AuditSeeds = Record<string, string[]>
@@ -15,14 +14,15 @@ export interface Suspect {
   context: string
   seed: string
   operators: string[]
-  /** 第一個出處,例如「char_002_amiya 技能1 m3」。 */
+  /** 第一個出現的位置,例如「char_002_amiya 技能1 m3」。 */
   where: string
 }
 
 interface AuditTarget {
   keyword: string
   seeds: string[]
-  marks: Set<string>
+  /** 整段敘述已標過其中任一個關鍵字,就不掃這段。 */
+  satisfiedBy: Set<string>
 }
 
 interface AuditText {
@@ -30,32 +30,43 @@ interface AuditText {
   operator: string
   where: string
   text: string
-  owner: (string | undefined)[]
+  keywordAt: (string | undefined)[]
 }
 
 const CONTEXT = 8
 const OWN_SIDE = /·我方$/
 
-/** 稽核的術語與補充關鍵字;種子字清單與補充關鍵字清單對不上時發警告。 */
-export function auditTargets(input: BuildInput, warn: (message: string) => void): AuditTarget[] {
-  return [...termTargets(input), ...supplementTargets(input, warn)]
+/** 敘述出現的位置,例如「char_002_amiya 技能1 m3」;待複核清單與疑似漏標共用這個格式。 */
+export function whereOf(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, stage: Pick<IndexStage, 'kind' | 'module'>): string {
+  const source = entry.kind === 'skill' ? `技能${entry.no} ${stage.kind}` : entry.kind === 'talent' ? `天賦${entry.no}` : '特性'
+  const module = stage.kind === 'module' ? ` 模組3 ${stage.module}` : ''
+  return `${owner} ${source}${module}`
 }
 
-function termTargets(input: BuildInput): AuditTarget[] {
-  const excluded = new Set(input.excludedTerms)
+/** 稽核的術語與補充關鍵字;種子字清單與補充關鍵字清單對不上時發警告。 */
+export function auditTargets(input: BuildInput, keywordTerms: Set<string>, warn: (message: string) => void): AuditTarget[] {
+  return [...termTargets(input, keywordTerms), ...supplementTargets(input, warn)]
+}
+
+function termTargets(input: BuildInput, ids: Set<string>): AuditTarget[] {
   const dicts = [input.cn.gamedataConst.termDescriptionDict, input.tw?.gamedataConst.termDescriptionDict ?? {}]
-  const ids = new Set(dicts.flatMap((d) => Object.keys(d)).filter((id) => isKeywordTerm(id, excluded)))
   const groups = new Map<string, string[]>()
   for (const id of ids) {
-    const base = id.endsWith('2') && ids.has(id.slice(0, -1)) ? id.slice(0, -1) : id
+    const base = pairedTermBase(id, ids)
     groups.set(base, [...(groups.get(base) ?? []), id])
   }
   return [...groups]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([keyword, members]) => {
       const names = members.flatMap((id) => dicts.map((d) => d[id]?.termName.replace(OWN_SIDE, '')))
-      return { keyword, seeds: [...new Set(names.filter((n): n is string => !!n))], marks: new Set(members) }
+      return { keyword, seeds: [...new Set(names.filter((n): n is string => !!n))], satisfiedBy: new Set(members) }
     })
+}
+
+/** 同名的「·我方」術語(id 多一個結尾 2)併到不帶 2 的 id 名下。 */
+function pairedTermBase(id: string, ids: Set<string>): string {
+  const base = id.slice(0, -1)
+  return id.endsWith('2') && ids.has(base) ? base : id
 }
 
 function supplementTargets(input: BuildInput, warn: (message: string) => void): AuditTarget[] {
@@ -70,7 +81,7 @@ function supplementTargets(input: BuildInput, warn: (message: string) => void): 
       warn(`補充關鍵字 ${id} 沒有稽核種子字`)
       continue
     }
-    targets.push({ keyword: `sup.${id}`, seeds: strings, marks: new Set([`sup.${id}`]) })
+    targets.push({ keyword: `sup.${id}`, seeds: strings, satisfiedBy: new Set([`sup.${id}`]) })
   }
   return targets
 }
@@ -79,22 +90,20 @@ function supplementTargets(input: BuildInput, warn: (message: string) => void): 
 export function auditSuspects(files: OperatorFile[], targets: AuditTarget[]): Suspect[] {
   const texts = files.flatMap(auditTexts)
   return targets.flatMap((target) => {
-    const found = new Map<string, Suspect & { ops: Set<string> }>()
+    const found = new Map<string, Suspect>()
     for (const t of texts) {
-      if (t.owner.some((k) => k && target.marks.has(k))) continue
+      if (t.keywordAt.some((k) => k && target.satisfiedBy.has(k))) continue
       for (const seed of target.seeds)
         for (let from = t.text.indexOf(seed); from !== -1; from = t.text.indexOf(seed, from + 1)) {
-          if (t.owner.slice(from, from + seed.length).some(Boolean)) continue
+          if (t.keywordAt.slice(from, from + seed.length).some(Boolean)) continue
           const context = contextOf(t.text, from, seed)
           const key = `${t.server} ${target.keyword} ${context}`
           const suspect = found.get(key)
-          if (suspect) suspect.ops.add(t.operator)
-          else found.set(key, { key, server: t.server, keyword: target.keyword, context, seed, operators: [], where: t.where, ops: new Set([t.operator]) })
+          if (!suspect) found.set(key, { key, server: t.server, keyword: target.keyword, context, seed, operators: [t.operator], where: t.where })
+          else if (!suspect.operators.includes(t.operator)) suspect.operators.push(t.operator)
         }
     }
-    return [...found.values()]
-      .map(({ ops, ...s }) => ({ ...s, operators: [...ops] }))
-      .sort((a, b) => b.operators.length - a.operators.length)
+    return [...found.values()].sort((a, b) => b.operators.length - a.operators.length)
   })
 }
 
@@ -112,15 +121,9 @@ function auditTexts(file: OperatorFile): AuditText[] {
       for (const server of ['cn', 'tw'] as const) {
         const runs = stage[server]?.runs
         if (!runs) continue
-        const owner: (string | undefined)[] = []
-        for (const r of runs) for (let i = 0; i < r.t.length; i++) owner.push(r.k)
-        out.push({ server, operator: file.id, where: whereOf(file.id, entry, stage), text: runs.map((r) => r.t).join(''), owner })
+        const keywordAt: (string | undefined)[] = []
+        for (const r of runs) for (let i = 0; i < r.t.length; i++) keywordAt.push(r.k)
+        out.push({ server, operator: file.id, where: whereOf(entry.summon ?? file.id, entry, stage), text: runs.map((r) => r.t).join(''), keywordAt })
       }
   return out
-}
-
-function whereOf(operator: string, entry: IndexEntry, stage: IndexStage): string {
-  const source = entry.kind === 'skill' ? `技能${entry.no} ${stage.kind}` : entry.kind === 'talent' ? `天賦${entry.no}` : '特性'
-  const module = stage.kind === 'module' ? ` 模組3 ${stage.module}` : ''
-  return `${entry.summon ?? operator} ${source}${module}`
 }
