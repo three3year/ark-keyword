@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
-import { type SupplementKeyword, buildIndex } from '../build/buildIndex'
+import { type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
 import { keywordGroups, query } from '../src/core/query'
+import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
 
 const supplements: SupplementKeyword[] = [
@@ -51,6 +52,39 @@ describe('補充關鍵字', () => {
       { 'ba.cold': ['apply'], 'sup.knockback': ['apply'] },
       { 'ba.cold': ['apply'] },
     ])
+  })
+
+  describe('技力回復(維護者清單的比對字串)', () => {
+    // 陸服、台服各一份同樣的幹員,敘述取自實際遊戲文字
+    const cases: [name: string, cn: string, tw: string][] = [
+      ['瞬間回復', '攻击敌人时额外回复2点技力', '攻擊敵人時額外回復2點技力'],
+      ['擊殺回復', '造成致命伤害时使敌人保留1点生命并使其重伤（击杀者技力+2）', '造成致命傷害時使敵人保留1點生命並使其重傷（擊殺者技力+2）'],
+      ['回復速度', '攻击范围内存在敌人时技力自然恢复速度+0.2/秒', '攻擊範圍內存在敵人時技力自然恢復速度+0.2/秒'],
+      ['初始技力', '编入队伍时所有【叙拉古】干员的初始技力+5', '編入隊伍時所有【敘拉古】幹員的初始技力+5'],
+      ['只提技力', '技力满时可使用装备应变来开启技能', '技力滿時可使用裝備應變來開啟技能'],
+    ]
+    function servers() {
+      const operators = (style: 'array' | 'object') =>
+        Object.fromEntries(cases.map(([name], i) => [`char_700_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
+      const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
+      return {
+        cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
+        tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
+      }
+    }
+
+    test.each(['cn', 'tw'] as const)('%s:瞬間回復、回復速度提升、初始技力提高命中,只提到技力的不命中', (srv) => {
+      // 命中的配對經複核判定為施加後才查得到(規則判定不出的配對效果類型為空)
+      const first = buildIndex({ ...servers(), supplements: realSupplements })
+      const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
+      const { index } = buildIndex({ ...servers(), supplements: realSupplements, overrides })
+      const results = query(index, { conditions: applying('sup.sprecovery'), server: srv })
+      expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復'].sort())
+      const sp = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
+      expect(sp.name).toBe('技力回復')
+      expect(sp.unofficial).toBe(true)
+      expect(plain(sp.definition)).toBe('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+    })
   })
 
   test('面板依清單排列,定義標為非官方', () => {
