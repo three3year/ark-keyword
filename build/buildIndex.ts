@@ -32,6 +32,7 @@ import type {
   Trigger,
 } from '../src/core/types'
 import { PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
+import { type AuditSeeds, auditSuspects, auditTargets, type Suspect } from './audit'
 import { ruleEffectTypes } from './effectType'
 import { withPotentialBonus } from './potential'
 import type {
@@ -122,6 +123,7 @@ export interface BuildInput extends PerServer<RawServer> {
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
   twPowerNames?: Record<PowerId, string>
   powerList?: PowerList
+  auditSeeds?: AuditSeeds
 }
 
 export interface BuildOutput {
@@ -130,6 +132,7 @@ export interface BuildOutput {
   operatorFiles: OperatorFile[]
   warnings: string[]
   pending: PendingReview[]
+  suspects: Suspect[]
 }
 
 const UNGROUPED = '未分組'
@@ -793,7 +796,8 @@ function textHash(text: string): string {
 export function buildIndex(input: BuildInput): BuildOutput {
   const builder = new Builder(input)
   const index = builder.build()
-  return { index, operatorFiles: builder.operatorFiles, warnings: builder.warnings, pending: [...builder.pending.values()] }
+  const suspects = auditSuspects(builder.operatorFiles, auditTargets(input, builder.warn))
+  return { index, operatorFiles: builder.operatorFiles, warnings: builder.warnings, pending: [...builder.pending.values()], suspects }
 }
 
 /**
