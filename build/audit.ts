@@ -21,7 +21,7 @@ export interface Suspect {
 interface AuditTarget {
   keyword: string
   seeds: string[]
-  /** 整段敘述已標過其中任一個關鍵字,就不掃這段。 */
+  /** 整段敘述已有其中任一個關鍵字的配對(含效果類型為空而拿掉標記的),就不掃這段。 */
   satisfiedBy: Set<string>
 }
 
@@ -30,6 +30,8 @@ interface AuditText {
   operator: string
   where: string
   text: string
+  /** 這段敘述有配對的關鍵字。 */
+  keywords: string[]
   keywordAt: (string | undefined)[]
 }
 
@@ -97,7 +99,7 @@ export function auditSuspects(files: OperatorFile[], targets: AuditTarget[]): Su
   return targets.flatMap((target) => {
     const found = new Map<string, Suspect>()
     for (const t of texts) {
-      if (t.keywordAt.some((k) => k && target.satisfiedBy.has(k))) continue
+      if (t.keywords.some((k) => target.satisfiedBy.has(k))) continue
       for (const seed of target.seeds)
         for (let from = t.text.indexOf(seed); from !== -1; from = t.text.indexOf(seed, from + 1)) {
           if (t.keywordAt.slice(from, from + seed.length).some(Boolean)) continue
@@ -124,11 +126,12 @@ function auditTexts(file: OperatorFile): AuditText[] {
   for (const entry of file.entries)
     for (const stage of entry.stages)
       for (const server of ['cn', 'tw'] as const) {
-        const runs = stage[server]?.runs
-        if (!runs) continue
+        const text = stage[server]
+        if (!text) continue
+        const { runs, hits } = text
         const keywordAt: (string | undefined)[] = []
         for (const r of runs) for (let i = 0; i < r.t.length; i++) keywordAt.push(r.k)
-        out.push({ server, operator: file.id, where: whereOf(entry.summon ?? file.id, entry, stage), text: runs.map((r) => r.t).join(''), keywordAt })
+        out.push({ server, operator: file.id, where: whereOf(entry.summon ?? file.id, entry, stage), text: runs.map((r) => r.t).join(''), keywords: Object.keys(hits), keywordAt })
       }
   return out
 }

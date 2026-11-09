@@ -569,23 +569,27 @@ class Builder {
     return out
   }
 
-  /** 以產生器分別產生陸服與台服文字,組成一個階段。陸服沒有這段敘述時回傳 undefined。 */
+  /**
+   * 以產生器分別產生陸服與台服文字,組成一個階段。陸服沒有這段敘述時回傳 undefined。
+   * 兩服是否一致以拿掉空類型補充關鍵字標記之前的文字比較。
+   */
   stage(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, head: Pick<IndexStage, 'kind' | 'module'>, produce: Producer): IndexStage | undefined {
     const cnRuns = produce('cn')
     if (!cnRuns) return undefined
     const where = whereOf(owner, entry, head)
-    const stage: IndexStage = { ...head, cn: this.finish(cnRuns, 'cn', where) }
+    const cn = this.finish(cnRuns, 'cn', where)
+    const stage: IndexStage = { ...head, cn: withoutEmptySupplements(cn) }
     const twOfficial = this.input.tw ? produce('tw') : undefined
     if (twOfficial) {
       const { runs: twRuns, ambiguous } = this.tagFromCn(cnRuns, twOfficial, where)
       const marked = markTextMatches(twRuns, this.matchers.tw)
-      if (signature(marked) === signature(stage.cn.runs)) {
+      if (signature(marked) === signature(cn.runs)) {
         // 與陸服一致:沿用陸服的效果類型,陸服模式可改顯示繁中
-        stage.tw = { runs: marked, hits: structuredClone(stage.cn.hits) }
+        stage.tw = withoutEmptySupplements({ runs: marked, hits: structuredClone(cn.hits) })
         stage.twSame = true
-        this.warnTwOverrideMismatch(marked, stage.cn.hits, where)
+        this.warnTwOverrideMismatch(marked, cn.hits, where)
       } else {
-        stage.tw = this.finish(twRuns, 'tw', `${where}(台服)`)
+        stage.tw = withoutEmptySupplements(this.finish(twRuns, 'tw', `${where}(台服)`))
       }
       this.warnMissingFromCn(cnRuns, stage.tw.runs, ambiguous, where)
     }
@@ -721,6 +725,15 @@ function supplementId(s: SupplementKeyword): string {
 
 function isOperator(id: string, char: RawCharacter): boolean {
   return id.startsWith('char_') && (PROFESSIONS as readonly string[]).includes(char.profession) && !char.isNotObtainable
+}
+
+/** 效果類型為空的補充關鍵字拿掉標記,變回純文字(術語照舊標記)。 */
+function withoutEmptySupplements(text: IndexText): IndexText {
+  const empty = (k: string | undefined) => !!k?.startsWith('sup.') && text.hits[k]?.length === 0
+  if (!text.runs.some((r) => empty(r.k))) return text
+  const runs: Run[] = []
+  for (const r of text.runs) push(runs, empty(r.k) ? { ...r, k: undefined } : r)
+  return { ...text, runs }
 }
 
 /** 每個術語的標記數:連續帶同一個術語的 runs(標記因樣式拆成幾段)算一個標記。 */
