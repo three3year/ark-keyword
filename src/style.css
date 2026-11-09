@@ -551,7 +551,6 @@ input:focus-visible {
   border-style: dashed;
 }
 
-/* 選取的勢力鈕和篩選列選取的職業鈕同色,與選取時是藍色的關鍵字鈕分開 */
 .kw.power.on {
   background: var(--profession);
   border-color: var(--profession);
@@ -586,7 +585,6 @@ input:focus-visible {
   font-weight: 600;
 }
 
-/* 職業與勢力 chip:和搜尋條件 chip 同形,換成職業色;沒有類型鈕與定義 */
 .profession-chip,
 .power-chip {
   border-color: var(--profession);

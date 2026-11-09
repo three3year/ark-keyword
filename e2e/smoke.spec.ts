@@ -185,7 +185,6 @@ test('職業 chip:在搜尋條件 chip 上方、依遊戲內順序,× 與篩選�
 
 test('沒有結果時依職業、勢力、搜尋條件、伺服器、星級列出生效的條件', async ({ page }) => {
   await page.goto('./')
-  // 勢力依面板順序列出,不依點選先後
   const panel = page.getByRole('complementary', { name: '關鍵字面板' })
   const [kazimierz, abyssal] = [powerDisplayName('kazimierz'), powerDisplayName('abyssal')]
   await panel.getByRole('button', { name: abyssal, exact: true }).click()
@@ -206,7 +205,6 @@ test('沒有結果時依職業、勢力、搜尋條件、伺服器、星級列�
   ])
   await expect(empty).not.toContainText('分支')
 
-  // 只有職業條件:沒有「勢力」「搜尋條件」這兩項
   await page.getByRole('button', { name: `移除 ${kazimierz}` }).click()
   await page.getByRole('button', { name: `移除 ${abyssal}` }).click()
   await page.getByRole('button', { name: '移除 暈眩' }).click()
@@ -432,22 +430,18 @@ test('勢力 chip:點勢力出現 chip 與小卡,在職業 chip 之後;× 與面
   const button = panel.getByRole('button', { name, exact: true })
   const powerChips = page.getByTestId('power-chip')
 
-  // 只有勢力條件就開始搜尋:結果是只有卡頭的小卡
   await button.click()
   await expect(button).toHaveAttribute('aria-pressed', 'true')
   await expect(powerChips).toHaveText([new RegExp(name)])
-  // 勢力 chip 沒有類型鈕,只有 ×
   await expect(powerChips.getByRole('button')).toHaveCount(1)
   await expect(page.getByTestId('result-card').first()).toBeVisible()
   await expect(page.getByTestId('entry')).toHaveCount(0)
   expect(Number(/\d+/.exec((await page.getByTestId('result-count').textContent()) ?? '')?.[0])).toBeGreaterThan(0)
 
-  // 職業 chip 與勢力 chip 同一行,職業在前
   await page.getByRole('group', { name: '職業' }).getByRole('button', { name: '近衛', exact: true }).click()
   const row = page.locator('.chips').filter({ has: powerChips })
   await expect(row.locator('.chip')).toHaveText([/近衛/, new RegExp(name)])
 
-  // × 移除勢力條件,面板勢力鈕跟著取消;再點面板勢力鈕 chip 再出現
   await page.getByRole('button', { name: `移除 ${name}` }).click()
   await expect(powerChips).toHaveCount(0)
   await expect(button).toHaveAttribute('aria-pressed', 'false')

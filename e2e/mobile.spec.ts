@@ -171,7 +171,6 @@ test('手機寬度:抽屜鈕計數包含勢力條件,文字與抽屜標題不變
   await panel.getByRole('button', { name: '完成' }).tap()
   await expect(drawerBtn).toHaveText('關鍵字(3)')
 
-  // 職業 chip 與勢力 chip 擠在同一行時折行,不撐寬頁面
   const filter = page.getByRole('group', { name: '職業' })
   for (const name of ['先鋒', '近衛', '重裝']) await filter.getByRole('button', { name, exact: true }).tap()
   await expect(page.getByTestId('power-chip')).toHaveCount(2)

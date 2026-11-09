@@ -55,7 +55,6 @@ describe('補充關鍵字', () => {
   })
 
   describe('技力回復(維護者清單的比對字串)', () => {
-    // 陸服、台服各一份同樣的幹員,敘述取自實際遊戲文字
     const cases: [name: string, cn: string, tw: string][] = [
       ['瞬間回復', '攻击敌人时额外回复2点技力', '攻擊敵人時額外回復2點技力'],
       ['擊殺回復', '造成致命伤害时使敌人保留1点生命并使其重伤（击杀者技力+2）', '造成致命傷害時使敵人保留1點生命並使其重傷（擊殺者技力+2）'],
@@ -74,7 +73,6 @@ describe('補充關鍵字', () => {
     }
 
     test.each(['cn', 'tw'] as const)('%s:瞬間回復、回復速度提升、初始技力提高命中,只提到技力的不命中', (srv) => {
-      // 命中的配對經複核判定為施加後才查得到(規則判定不出的配對效果類型為空)
       const first = buildIndex({ ...servers(), supplements: realSupplements })
       const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
       const { index } = buildIndex({ ...servers(), supplements: realSupplements, overrides })

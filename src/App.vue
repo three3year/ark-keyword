@@ -58,16 +58,13 @@ const rarities = ref<number[]>([])
 const professions = ref<Profession[]>([])
 /** 職業條件依遊戲內職業順序,不依點選先後。 */
 const sortedProfessions = computed(() => PROFESSIONS.filter((p) => professions.value.includes(p)))
-/** 勢力條件(勢力 id):彼此 OR,與搜尋條件、職業條件 AND;切換伺服器不改。 */
 const powers = ref<string[]>([])
-/** 勢力條件依面板(維護者清單)順序,不依點選先後。 */
 const sortedPowers = computed(() =>
   (index.value?.powerRows.flat() ?? []).map((p) => p.id).filter((id) => powers.value.includes(id)),
 )
 const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value, powers: powers.value }))
 // 窄螢幕上關鍵字面板收合成抽屜
 const drawerOpen = ref(false)
-/** 抽屜鈕計數:抽屜裡亮著的鈕(關鍵字與勢力);職業鈕不在抽屜裡,不算。 */
 const drawerCount = computed(() => selected.value.length + powers.value.length)
 
 onMounted(async () => {
@@ -134,7 +131,6 @@ function removeProfession(p: Profession) {
   professions.value = professions.value.filter((x) => x !== p)
 }
 
-/** 面板的勢力鈕:未選就加入,已選就移除。 */
 function togglePower(id: string) {
   powers.value = powers.value.includes(id) ? powers.value.filter((x) => x !== id) : [...powers.value, id]
 }
@@ -307,7 +303,6 @@ onBeforeUnmount(() => {
       </aside>
       <section class="results">
         <FilterBar v-model:rarities="rarities" v-model:professions="professions" :options="options" />
-        <!-- 職業與勢力 chip 一行在上(職業在前)、搜尋條件 chip 在下 -->
         <div v-if="sortedProfessions.length > 0 || powers.length > 0" class="chips">
           <span v-for="p in sortedProfessions" :key="p" class="chip profession-chip" data-testid="profession-chip">
             <span class="profession-name">{{ PROFESSION_LABELS[p] }}</span>
@@ -352,7 +347,6 @@ onBeforeUnmount(() => {
               <li v-for="c in emptyConditions" :key="c">{{ c }}</li>
             </ul>
           </div>
-          <!-- 只有職業或勢力條件時結果卡只有卡頭:排成多欄的小卡 -->
           <div class="result-list" :class="{ compact: conditions.length === 0 }" data-testid="result-list">
             <ResultCard
               v-for="op in results"

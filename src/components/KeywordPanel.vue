@@ -7,7 +7,6 @@ const props = defineProps<{
   index: SearchIndex
   server: Server
   selected: string[]
-  /** 已選的勢力條件。 */
   powers: string[]
 }>()
 const emit = defineEmits<{ toggle: [id: string]; togglePower: [id: string] }>()
@@ -35,7 +34,6 @@ const powerRows = computed(() => powerPanel(props.index, props.server))
         </button>
       </div>
     </section>
-    <!-- 勢力不是關鍵字:沒有 data-k,不顯示定義;沒有層級小標,一行對應清單的一行 -->
     <section v-if="powerRows.length > 0" class="kw-group">
       <h2 class="kw-group-name">勢力</h2>
       <div v-for="(row, i) in powerRows" :key="i" class="kw-list">

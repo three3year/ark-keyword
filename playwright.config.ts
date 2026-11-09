@@ -1,7 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
 // 煙霧測試對打包後的網頁執行:先 npm run build,再由 vite preview 提供靜態檔。
-// 平行的 worktree 用 PORT 環境變數各開各的埠。
 const port = process.env.PORT ?? '4173'
 
 export default defineConfig({

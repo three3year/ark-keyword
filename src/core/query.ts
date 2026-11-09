@@ -152,7 +152,6 @@ function resultOperator(op: IndexOperator, branch: string, opts: QueryOptions): 
     if (!stages.some((s) => s.hit)) continue
     entries.push(resultEntry(entry, summon, withAbsentBase(entry, stages), branch))
   }
-  // 搜尋條件一律 OR:有任一命中敘述就列入;沒有搜尋條件(只有職業或勢力條件)時全部列入,命中敘述為空
   if (entries.length === 0 && opts.conditions.length > 0) return undefined
   const result: ResultOperator = {
     id: op.id,
@@ -176,7 +175,6 @@ function passesFilters(op: IndexOperator, opts: QueryOptions): boolean {
   return true
 }
 
-/** 幹員在該伺服器所屬的清單內勢力。 */
 function powersOn(op: IndexOperator, server: Server): string[] {
   return op.powers ? onServer(op.powers, server) : []
 }
@@ -288,7 +286,6 @@ function detailPowers(p: OperatorPowers): Pick<OperatorDetail, 'power' | 'hidden
   return out
 }
 
-/** 有搜尋條件、職業條件、勢力條件其中一種就開始搜尋;只有星級篩選不算。 */
 export function startsSearch(opts: Pick<QueryOptions, 'conditions' | 'professions' | 'powers'>): boolean {
   return opts.conditions.length > 0 || !!opts.professions?.length || !!opts.powers?.length
 }
@@ -297,7 +294,6 @@ export function query(index: SearchIndex, opts: QueryOptions): ResultOperator[] 
   if (!startsSearch(opts)) return []
   const results: ResultOperator[] = []
   for (const op of [...index.operators].sort(compareOperators(index))) {
-    // 台服模式略過台服未實裝的幹員;只有職業或勢力條件時不會因為沒有命中敘述而被濾掉,要在這裡擋
     if (opts.server === 'tw' && !op.inTw) continue
     if (!passesFilters(op, opts)) continue
     const r = resultOperator(op, branchName(index, op), opts)
@@ -398,7 +394,6 @@ export function keywordGroups(index: SearchIndex, server: Server): PanelGroup[] 
 
 export interface PanelPower {
   id: string
-  /** 目前伺服器的顯示名稱。 */
   name: string
 }
 

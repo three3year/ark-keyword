@@ -23,12 +23,10 @@ interface Member {
   profession?: string
   power?: RawPower
   hiddenPowers?: RawPower[]
-  /** 會上寒冷。 */
   cold?: boolean
   talent?: string
 }
 
-/** 依「舊 → 新」建立幹員;只有陸服,除非另給台服的幹員。 */
 function fixture(members: Member[], twMembers: Member[] = []): BuildInput {
   const op = (m: Member, style: 'array' | 'object') =>
     operator({

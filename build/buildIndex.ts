@@ -77,7 +77,6 @@ function powerItem(item: PowerListItem): { id: string; cn?: string; tw?: string 
   return typeof item === 'string' ? { id: item } : item
 }
 
-/** 清單裡的勢力 id,依清單順序。 */
 export function listedPowerIds(list: PowerList): string[] {
   return list.flat().map((item) => powerItem(item).id)
 }
@@ -114,7 +113,6 @@ export interface BuildInput extends PerServer<RawServer> {
   prtsPages?: Record<string, string>
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
   twPowerNames?: Record<string, string>
-  /** 維護者清單:可選的勢力與面板排列。 */
   powerList?: PowerList
 }
 
@@ -148,9 +146,7 @@ class Builder {
   readonly operatorFiles: OperatorFile[] = []
   readonly matchers: Record<Server, SupplementMatcher[]>
   readonly excluded: Set<string>
-  /** 勢力清單裡的勢力 id,依清單順序。 */
   readonly listed: string[]
-  /** 陸服勢力名稱 → 勢力 id。 */
   readonly powerIdByName: Map<string, string>
 
   constructor(readonly input: BuildInput) {
@@ -308,7 +304,6 @@ class Builder {
     return op
   }
 
-  /** 幹員所屬的清單內勢力(勢力與隱藏勢力),兩服各一份;台服相同或台服未實裝時省略,兩服都沒有時為 undefined。 */
   listedPowers(char: RawCharacter, twChar: RawCharacter | undefined): PerServer<string[]> | undefined {
     const of = (c: RawCharacter) => {
       const own = new Set([c, ...(c.subPower ?? [])].flatMap(powerIds))
@@ -320,7 +315,6 @@ class Builder {
     return tw.join() === cn.join() ? { cn } : { cn, tw }
   }
 
-  /** 天賦或技能(含召喚物的)陸服文字裡,【】內是勢力名稱、該勢力卻不在清單時發警告。特性不檢查。 */
   checkUnlistedPowers(id: string, entries: IndexEntry[]) {
     for (const e of entries) {
       if (e.kind === 'trait') continue
@@ -333,7 +327,6 @@ class Builder {
     }
   }
 
-  /** 勢力面板:清單的行,每個勢力帶各伺服器的顯示名稱。 */
   powerRows(): IndexPower[][] {
     return (this.input.powerList ?? []).map((row) =>
       row.map((item) => {

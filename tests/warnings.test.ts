@@ -50,7 +50,6 @@ describe('已知警告', () => {
 describe('清單外勢力的警告', () => {
   const POWER_NAMES = { kazimierz: '卡西米尔', siracusa: '叙拉古' }
 
-  /** 幹員甲的天賦、技能、特性敘述由呼叫端給;勢力清單只有卡西米爾。 */
   function powerWarnings(spec: { talent?: string; skill?: string; trait?: string }): string[] {
     const skills = spec.skill ? [basicSkill('sk_x_1', '技', { description: spec.skill })] : []
     const cn = server({
