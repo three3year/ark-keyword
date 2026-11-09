@@ -27,7 +27,7 @@ disable-model-invocation: true
 
 讀 `review/pending-review.json`。0 筆就跳到第 4 步。
 
-每一筆依 `GLOSSARY.md` 的「效果類型」定義判定 `types`(`apply`/`exploit`/`counter`,可多種),寧缺勿濫:談不上任何一種就是空清單。
+每一筆依 `GLOSSARY.md` 的「效果類型」定義判定 `types`(`apply`/`exploit`/`counter`,可多種),寧缺勿濫:談不上任何一種就是空清單。判定時也看關鍵字的定義(`public/data/index.json` 的 `keywords`):敘述不具有定義所說的效果就判成空清單,例如只回自身技力的敘述對友方技力回復。
 
 **停下**:每一筆都列給維護者,一筆一列:幹員名(依 `where` 開頭的 id 查 `public/data/index.json` 的 `operators`;召喚物的 id 在 `operators` 的 `summons` 裡,列成「幹員名/召喚物名」)、敘述來源(`where`)、關鍵字名、規則判定(`ruleTypes`)、敘述原文(`text`)、你的判定與一句理由。維護者確認或改掉幾筆後,才把確認後的判定寫成 `review/decisions/<今天日期>.json`:
 
