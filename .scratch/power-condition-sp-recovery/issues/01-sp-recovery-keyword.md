@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] 補充關鍵字清單新增「技力回復」,含定義與陸服、台服各一組比對字串;比對字串由掃過兩服實際敘述後決定,比對機制不變(純文字子字串)
 - [x] 關鍵字分組:增益分組第三行,緊接在鼓舞之後
