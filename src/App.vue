@@ -60,9 +60,15 @@ const professions = ref<Profession[]>([])
 const sortedProfessions = computed(() => PROFESSIONS.filter((p) => professions.value.includes(p)))
 /** 勢力條件(勢力 id):彼此 OR,與搜尋條件、職業條件 AND;切換伺服器不改。 */
 const powers = ref<string[]>([])
+/** 勢力條件依面板(維護者清單)順序,不依點選先後。 */
+const sortedPowers = computed(() =>
+  (index.value?.powerRows.flat() ?? []).map((p) => p.id).filter((id) => powers.value.includes(id)),
+)
 const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value, powers: powers.value }))
 // 窄螢幕上關鍵字面板收合成抽屜
 const drawerOpen = ref(false)
+/** 抽屜鈕計數:抽屜裡亮著的鈕(關鍵字與勢力);職業鈕不在抽屜裡,不算。 */
+const drawerCount = computed(() => selected.value.length + powers.value.length)
 
 onMounted(async () => {
   try {
@@ -100,6 +106,7 @@ function hasData(id: string, type: EffectType): boolean {
 const emptyConditions = computed(() => {
   const list: string[] = []
   if (professions.value.length) list.push(`職業:${sortedProfessions.value.map((p) => PROFESSION_LABELS[p]).join('、')}`)
+  if (powers.value.length) list.push(`勢力:${sortedPowers.value.map(powerLabel).join('、')}`)
   if (conditions.value.length) list.push(`搜尋條件:${conditions.value.map((c) => `${EFFECT_TYPE_LABELS[c.type]}-${keywordName(c.keyword)}`).join('、')}`)
   list.push(`伺服器:${server.value === 'tw' ? '台服' : '陸服'}`)
   if (rarities.value.length) list.push(`星級:${[...rarities.value].sort((a, b) => b - a).map((r) => `${r}★`).join('、')}`)
@@ -279,7 +286,7 @@ onBeforeUnmount(() => {
     </header>
     <!-- 窄螢幕上浮在右下角;抽屜打開時隱藏 -->
     <button v-if="index" v-show="!drawerOpen" class="drawer-btn" @click.stop="drawerOpen = true">
-      關鍵字<template v-if="selected.length">({{ selected.length }})</template>
+      關鍵字<template v-if="drawerCount">({{ drawerCount }})</template>
     </button>
     <p v-if="error" class="error">{{ error }}</p>
     <main v-else-if="index" class="layout">
@@ -306,7 +313,7 @@ onBeforeUnmount(() => {
             <span class="profession-name">{{ PROFESSION_LABELS[p] }}</span>
             <button class="chip-x" :aria-label="`移除 ${PROFESSION_LABELS[p]}`" @click.stop="removeProfession(p)">×</button>
           </span>
-          <span v-for="p in powers" :key="p" class="chip power-chip" data-testid="power-chip">
+          <span v-for="p in sortedPowers" :key="p" class="chip power-chip" data-testid="power-chip">
             <span class="power-name">{{ powerLabel(p) }}</span>
             <button class="chip-x" :aria-label="`移除 ${powerLabel(p)}`" @click.stop="togglePower(p)">×</button>
           </span>
@@ -333,7 +340,7 @@ onBeforeUnmount(() => {
             <button class="chip-x" :aria-label="`移除 ${keywordName(s.keyword)}`" @click.stop="remove(s.keyword)">×</button>
           </span>
         </div>
-        <p v-if="!searching" class="hint">點選關鍵字或職業開始搜尋</p>
+        <p v-if="!searching" class="hint">點選關鍵字、職業或勢力開始搜尋</p>
         <template v-else>
           <div class="result-meta">
             <span data-testid="result-count">共 {{ results.length }} 位幹員</span>

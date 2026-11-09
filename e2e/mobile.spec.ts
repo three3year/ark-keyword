@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { gotoWithPowers } from './data'
+import { gotoWithPowers, powerDisplayName } from './data'
 
 test('手機寬度:抽屜選關鍵字、點擊顯示定義、點高亮詞只顯示定義不改搜尋,職業 chip 不算進抽屜計數,且沒有水平捲動', async ({ page }) => {
   await page.goto('./')
@@ -151,4 +151,30 @@ test('手機寬度:標題列兩行,伺服器切換與外觀在標題下方同一
   expect(footer.y + footer.height).toBeLessThanOrEqual(drawerBtnTop)
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+})
+
+test('手機寬度:抽屜鈕計數包含勢力條件,文字與抽屜標題不變;多了勢力分組與勢力 chip 也沒有水平捲動', async ({ page }) => {
+  await page.goto('./')
+  const noHorizontalScroll = () =>
+    page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)
+  const drawerBtn = page.getByRole('button', { name: /^關鍵字/ })
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+
+  await drawerBtn.tap()
+  await expect(panel.locator('.drawer-head strong')).toHaveText('關鍵字')
+  await expect(panel.locator('.kw-group').last().getByRole('heading')).toHaveText('勢力')
+  await panel.locator('.kw-group').last().scrollIntoViewIfNeeded()
+  expect(await noHorizontalScroll()).toBe(true)
+  const powers = [powerDisplayName('student'), powerDisplayName('kazimierz')]
+  await panel.getByRole('button', { name: '暈眩', exact: true }).first().tap()
+  for (const name of powers) await panel.getByRole('button', { name, exact: true }).tap()
+  await panel.getByRole('button', { name: '完成' }).tap()
+  await expect(drawerBtn).toHaveText('關鍵字(3)')
+
+  // 職業 chip 與勢力 chip 擠在同一行時折行,不撐寬頁面
+  const filter = page.getByRole('group', { name: '職業' })
+  for (const name of ['先鋒', '近衛', '重裝']) await filter.getByRole('button', { name, exact: true }).tap()
+  await expect(page.getByTestId('power-chip')).toHaveCount(2)
+  await expect(drawerBtn).toHaveText('關鍵字(3)')
+  expect(await noHorizontalScroll()).toBe(true)
 })

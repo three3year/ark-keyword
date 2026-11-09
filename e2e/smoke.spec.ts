@@ -121,12 +121,12 @@ test('搜尋條件 chip:加入時只亮施加,再亮一顆後結果變多或不�
   await expect(chip).toHaveCount(1)
   await types.getByRole('button', { name: '利用' }).click()
   await expect(chip).toHaveCount(0)
-  await expect(page.getByText('點選關鍵字或職業開始搜尋')).toBeVisible()
+  await expect(page.getByText('點選關鍵字、職業或勢力開始搜尋')).toBeVisible()
 })
 
 test('只選職業也開始搜尋:列出該職業幹員,結果卡是只有卡頭、一行多張的小卡;只勾星級不搜尋', async ({ page }) => {
   await page.goto('./')
-  const hint = page.getByText('點選關鍵字或職業開始搜尋')
+  const hint = page.getByText('點選關鍵字、職業或勢力開始搜尋')
   await expect(hint).toBeVisible()
   await page.getByRole('checkbox', { name: '6★' }).check()
   await expect(hint).toBeVisible()
@@ -183,8 +183,13 @@ test('職業 chip:在搜尋條件 chip 上方、依遊戲內順序,× 與篩選�
   await expect(professionChips).toHaveText([/先鋒/, /狙擊/])
 })
 
-test('沒有結果時依職業、搜尋條件、伺服器、星級列出生效的條件', async ({ page }) => {
+test('沒有結果時依職業、勢力、搜尋條件、伺服器、星級列出生效的條件', async ({ page }) => {
   await page.goto('./')
+  // 勢力依面板順序列出,不依點選先後
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const [kazimierz, abyssal] = [powerDisplayName('kazimierz'), powerDisplayName('abyssal')]
+  await panel.getByRole('button', { name: abyssal, exact: true }).click()
+  await panel.getByRole('button', { name: kazimierz, exact: true }).click()
   await page.getByRole('button', { name: '暈眩', exact: true }).first().click()
   await page.getByRole('button', { name: '停頓', exact: true }).first().click()
   await page.getByRole('group', { name: '停頓的效果類型' }).getByRole('button', { name: '利用' }).click()
@@ -192,10 +197,18 @@ test('沒有結果時依職業、搜尋條件、伺服器、星級列出生效�
   await page.getByRole('checkbox', { name: '1★' }).check()
   await page.getByRole('button', { name: '醫療', exact: true }).click()
   const empty = page.getByTestId('empty')
-  await expect(empty.getByRole('listitem')).toHaveText(['職業:醫療', '搜尋條件:施加-暈眩、施加-停頓、利用-停頓', '伺服器:陸服', '星級:1★'])
+  await expect(empty.getByRole('listitem')).toHaveText([
+    '職業:醫療',
+    `勢力:${kazimierz}、${abyssal}`,
+    '搜尋條件:施加-暈眩、施加-停頓、利用-停頓',
+    '伺服器:陸服',
+    '星級:1★',
+  ])
   await expect(empty).not.toContainText('分支')
 
-  // 只有職業條件:沒有「搜尋條件」這一項
+  // 只有職業條件:沒有「勢力」「搜尋條件」這兩項
+  await page.getByRole('button', { name: `移除 ${kazimierz}` }).click()
+  await page.getByRole('button', { name: `移除 ${abyssal}` }).click()
   await page.getByRole('button', { name: '移除 暈眩' }).click()
   await page.getByRole('button', { name: '移除 停頓' }).click()
   await page.getByRole('checkbox', { name: '1★' }).uncheck()
@@ -284,7 +297,7 @@ test('關鍵字面板:補充關鍵字叫推、拉;頂端沒有過濾欄位與清
 
   await push.click()
   await expect(page.getByTestId('chip')).toHaveCount(0)
-  await expect(page.getByText('點選關鍵字或職業開始搜尋')).toBeVisible()
+  await expect(page.getByText('點選關鍵字、職業或勢力開始搜尋')).toBeVisible()
 })
 
 test('效果類型判定:鉤索師特性的模組3 階段只算利用-拉;佩佩利用與反制異常狀態;酒神利用束縛', async ({ page }) => {
@@ -422,4 +435,13 @@ test('勢力 chip:點勢力出現 chip 與小卡,在職業 chip 之後;× 與面
   await expect(button).toHaveAttribute('aria-pressed', 'false')
   await button.click()
   await expect(powerChips).toHaveText([new RegExp(name)])
+})
+
+test('勢力 chip 依面板順序排列:先點後面的勢力結果一樣', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const [first, second] = [powerDisplayName('kazimierz'), powerDisplayName('abyssal')]
+  await panel.getByRole('button', { name: second, exact: true }).click()
+  await panel.getByRole('button', { name: first, exact: true }).click()
+  await expect(page.getByTestId('power-chip')).toHaveText([new RegExp(first), new RegExp(second)])
 })
