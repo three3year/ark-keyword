@@ -15,5 +15,6 @@
   { "id": "ba.magicfragile", "cn": ["法术脆弱"], "tw": ["法術脆弱"] },
   { "id": "ba.physicfragile", "cn": ["物理脆弱"], "tw": ["物理脆弱"] },
   { "id": "ba.elementfragile", "cn": ["元素脆弱"], "tw": ["元素脆弱"] },
-  { "id": "ba.physhield", "cn": ["物理护盾"], "tw": ["物理護盾"] }
+  { "id": "ba.physhield", "cn": ["物理护盾"], "tw": ["物理護盾"] },
+  { "id": "ba.barrier", "cn": ["屏障效果"], "tw": ["屏障效果"] }
 ]
