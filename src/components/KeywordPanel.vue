@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { keywordGroups } from '../core/query'
+import { keywordGroups, powerPanel } from '../core/query'
 import type { SearchIndex, Server } from '../core/types'
 
 const props = defineProps<{
   index: SearchIndex
   server: Server
   selected: string[]
+  /** 已選的勢力條件。 */
+  powers: string[]
 }>()
-const emit = defineEmits<{ toggle: [id: string] }>()
+const emit = defineEmits<{ toggle: [id: string]; togglePower: [id: string] }>()
 
 const groups = computed(() => keywordGroups(props.index, props.server))
+const powerRows = computed(() => powerPanel(props.index, props.server))
 </script>
 
 <template>
@@ -29,6 +32,22 @@ const groups = computed(() => keywordGroups(props.index, props.server))
           @click="emit('toggle', k.id)"
         >
           {{ k.name }}
+        </button>
+      </div>
+    </section>
+    <!-- 勢力不是關鍵字:沒有 data-k,不顯示定義;沒有層級小標,一行對應清單的一行 -->
+    <section v-if="powerRows.length > 0" class="kw-group">
+      <h2 class="kw-group-name">勢力</h2>
+      <div v-for="(row, i) in powerRows" :key="i" class="kw-list">
+        <button
+          v-for="p in row"
+          :key="p.id"
+          class="kw power"
+          :class="{ on: powers.includes(p.id) }"
+          :aria-pressed="powers.includes(p.id)"
+          @click="emit('togglePower', p.id)"
+        >
+          {{ p.name }}
         </button>
       </div>
     </section>

@@ -13,6 +13,7 @@ import type {
   IndexKeyword,
   IndexModule,
   IndexOperator,
+  IndexPower,
   IndexStage,
   IndexSummon,
   IndexText,
@@ -66,6 +67,21 @@ export interface SupplementKeyword {
   definition: string
 }
 
+/** 勢力的維護者清單的一項:勢力 id,可另附各伺服器的顯示名稱;沒附時用該伺服器的勢力名稱。 */
+export type PowerListItem = string | { id: string; cn?: string; tw?: string }
+
+/** 勢力的維護者清單:可選的勢力,由行組成(國家、組織、團隊各一行),順序就是面板順序。 */
+export type PowerList = PowerListItem[][]
+
+function powerItem(item: PowerListItem): { id: string; cn?: string; tw?: string } {
+  return typeof item === 'string' ? { id: item } : item
+}
+
+/** 清單裡的勢力 id,依清單順序。 */
+export function listedPowerIds(list: PowerList): string[] {
+  return list.flat().map((item) => powerItem(item).id)
+}
+
 /** 效果類型覆寫檔:以「敘述文字雜湊:關鍵字」為鍵,建置時優先於規則判定。types 為空表示複核後判定沒有效果類型。 */
 export type Overrides = Record<string, { types: EffectType[]; reviewed: boolean; note?: string }>
 
@@ -98,6 +114,8 @@ export interface BuildInput extends PerServer<RawServer> {
   prtsPages?: Record<string, string>
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
   twPowerNames?: Record<string, string>
+  /** 維護者清單:可選的勢力與面板排列。 */
+  powerList?: PowerList
 }
 
 export interface BuildOutput {
@@ -130,9 +148,12 @@ class Builder {
   readonly operatorFiles: OperatorFile[] = []
   readonly matchers: Record<Server, SupplementMatcher[]>
   readonly excluded: Set<string>
+  /** 勢力清單裡的勢力 id,依清單順序。 */
+  readonly listed: string[]
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
+    this.listed = listedPowerIds(input.powerList ?? [])
     const supplements = input.supplements ?? []
     this.matchers = {
       cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
@@ -172,6 +193,7 @@ class Builder {
       groups: this.groups(keywords),
       keywords,
       subProfessions: this.subProfessions(operators),
+      powerRows: this.powerRows(),
       operators,
     }
   }
@@ -264,7 +286,7 @@ class Builder {
     if (twChar) powers.tw = this.powers('tw', twChar)
     this.operatorFiles.push({ id, inTw: !!twChar, modules: indexModules, summons, entries, attributes, powers })
 
-    return {
+    const op: IndexOperator = {
       id,
       name: twChar?.name ?? char.name,
       rarity: Number(char.rarity.replace('TIER_', '')),
@@ -277,6 +299,33 @@ class Builder {
       summons,
       entries: entries.filter((e) => e.stages.some((st) => hasHits(st.cn) || (st.tw && hasHits(st.tw)))),
     }
+    const listed = this.listedPowers(char, twChar)
+    if (listed) op.powers = listed
+    return op
+  }
+
+  /** 幹員所屬的清單內勢力(勢力與隱藏勢力),兩服各一份;台服相同或台服未實裝時省略,兩服都沒有時為 undefined。 */
+  listedPowers(char: RawCharacter, twChar: RawCharacter | undefined): PerServer<string[]> | undefined {
+    const of = (c: RawCharacter) => {
+      const own = new Set([c, ...(c.subPower ?? [])].flatMap(powerIds))
+      return this.listed.filter((id) => own.has(id))
+    }
+    const cn = of(char)
+    const tw = twChar ? of(twChar) : cn
+    if (cn.length === 0 && tw.length === 0) return undefined
+    return tw.join() === cn.join() ? { cn } : { cn, tw }
+  }
+
+  /** 勢力面板:清單的行,每個勢力帶各伺服器的顯示名稱。 */
+  powerRows(): IndexPower[][] {
+    return (this.input.powerList ?? []).map((row) =>
+      row.map((item) => {
+        const { id, cn, tw } = powerItem(item)
+        const name: PerServer<string> = { cn: cn ?? this.powerName('cn', id) }
+        if (this.input.tw) name.tw = tw ?? this.powerName('tw', id)
+        return { id, name }
+      }),
+    )
   }
 
   powers(server: Server, char: RawCharacter): OperatorPowers {

@@ -28,6 +28,19 @@ export function groupRowNames(group: string, row: number): string[] {
   return found.rows[row].map(keywordName)
 }
 
+/** 勢力的維護者清單每一行的勢力 id。 */
+export function powerListRows(): string[][] {
+  const list: (string | { id: string })[][] = JSON.parse(readFileSync('data/power-list.json', 'utf8'))
+  return list.map((row) => row.map((item) => (typeof item === 'string' ? item : item.id)))
+}
+
+/** 索引裡勢力在某伺服器的顯示名稱。 */
+export function powerDisplayName(id: string, server: Server = 'cn'): string {
+  const power = index.powerRows.flat().find((p) => p.id === id)
+  if (!power) throw new Error(`索引沒有勢力 ${id}`)
+  return onServer(power.name, server)
+}
+
 export function twOperatorWithDifferentPrtsPage(): { name: string; prtsPage: string; rarity: number; profession: string } {
   const op = index.operators.find((o) => o.inTw && o.name !== o.prtsPage)
   if (!op) throw new Error('索引沒有名字與 PRTS 頁名不同的台服幹員')
