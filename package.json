@@ -13,7 +13,8 @@
     "build-index": "tsx build/cli.ts",
     "build-index:offline": "tsx build/cli.ts --offline",
     "check-upstream": "tsx build/checkUpstream.ts",
-    "accept-warnings": "tsx build/acceptWarnings.ts"
+    "accept-warnings": "tsx build/acceptKnown.ts warnings",
+    "accept-suspects": "tsx build/acceptKnown.ts suspects"
   },
   "dependencies": {
     "vue": "^3.5.44"
