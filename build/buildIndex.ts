@@ -31,7 +31,8 @@ import type {
   SummonOrigin,
   Trigger,
 } from '../src/core/types'
-import { PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
+import { EFFECT_TYPE_LABELS, PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
+import { type AuditSeeds, auditSuspects, auditTargets, type Suspect, whereOf } from './audit'
 import { ruleEffectTypes } from './effectType'
 import { withPotentialBonus } from './potential'
 import type {
@@ -47,8 +48,8 @@ import type {
   RawTalentCandidate,
   RawUnlockCondition,
 } from './raw'
-import { parseRichText, plainText, push, toValues } from './richText'
-import { type SupplementMatcher, markSupplements } from './supplements'
+import { isKeywordTerm, parseRichText, plainText, push, toValues } from './richText'
+import { markTextMatches, type TextMatcher } from './textMatch'
 
 function dataVersion(raw: RawServer): DataVersion {
   return { version: raw.gamedataConst.dataVersion ?? '', downloadedAt: raw.downloadedAt }
@@ -66,6 +67,14 @@ export interface SupplementKeyword {
   /** 繁中比對字串(台服文字)。 */
   tw: string[]
   definition: string
+}
+
+/** 維護者清單「術語比對清單」:遊戲漏標時,也以純文字比對補標成這個術語(名稱與定義用官方的)。 */
+export interface TermMatch {
+  /** 術語 id,必須是會成為關鍵字的戰鬥術語。 */
+  id: string
+  cn: string[]
+  tw: string[]
 }
 
 /** 勢力的維護者清單裡附了顯示名稱的一項;沒附的伺服器用該伺服器的勢力名稱。 */
@@ -114,6 +123,7 @@ export interface PendingReview {
 export interface BuildInput extends PerServer<RawServer> {
   groups?: KeywordGroup[]
   supplements?: SupplementKeyword[]
+  termMatches?: TermMatch[]
   overrides?: Overrides
   /** 維護者清單:談不上效果類型、不當關鍵字的術語 id(隊伍名等);敘述中顯示為一般文字。 */
   excludedTerms?: string[]
@@ -122,6 +132,7 @@ export interface BuildInput extends PerServer<RawServer> {
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
   twPowerNames?: Record<PowerId, string>
   powerList?: PowerList
+  auditSeeds?: AuditSeeds
 }
 
 export interface BuildOutput {
@@ -130,6 +141,7 @@ export interface BuildOutput {
   operatorFiles: OperatorFile[]
   warnings: string[]
   pending: PendingReview[]
+  suspects: Suspect[]
 }
 
 const UNGROUPED = '未分組'
@@ -152,20 +164,31 @@ class Builder {
   }
   readonly pending = new Map<string, PendingReview>()
   readonly operatorFiles: OperatorFile[] = []
-  readonly matchers: Record<Server, SupplementMatcher[]>
+  readonly matchers: Record<Server, TextMatcher[]>
   readonly excluded: Set<string>
+  readonly keywordTerms: Set<string>
   readonly listedPowerIds: PowerId[]
   readonly cnPowerIdByName: Map<string, PowerId>
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
+    const dicts = [input.cn.gamedataConst.termDescriptionDict, input.tw?.gamedataConst.termDescriptionDict ?? {}]
+    this.keywordTerms = new Set(dicts.flatMap((d) => Object.keys(d)).filter((id) => isKeywordTerm(id, this.excluded)))
     this.listedPowerIds = listedPowerIds(input.powerList ?? [])
     this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
-    const supplements = input.supplements ?? []
+    const matchers = [...(input.supplements ?? []).map((s) => ({ ...s, id: supplementId(s) })), ...this.keywordTermMatches()]
     this.matchers = {
-      cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
-      tw: supplements.map((s) => ({ id: supplementId(s), strings: s.tw })),
+      cn: matchers.map((m) => ({ id: m.id, strings: m.cn })),
+      tw: matchers.map((m) => ({ id: m.id, strings: m.tw })),
     }
+  }
+
+  keywordTermMatches(): TermMatch[] {
+    return (this.input.termMatches ?? []).filter((m) => {
+      if (this.keywordTerms.has(m.id)) return true
+      this.warn(`術語比對清單的 ${m.id} 不是會成為關鍵字的戰鬥術語,不比對`)
+      return false
+    })
   }
 
   raw(server: Server): RawServer | undefined {
@@ -392,7 +415,7 @@ class Builder {
       const stages: IndexStage[] = []
       for (const { kind, index } of skillStages(skill)) {
         const level = (server: Server) => this.raw(server)?.skillTable[skillId]?.levels[index]
-        const stage = this.stage({ kind }, `${ownerId} 技能${no} ${kind}`, (server) => {
+        const stage = this.stage(ownerId, { kind: 'skill', no }, { kind }, (server) => {
           const lv = level(server)
           if (!lv) return undefined
           return this.parse(lv.description ?? '', skillValues(lv), `${serverPrefix(server)}技能 ${skillId} ${kind}`)
@@ -431,13 +454,13 @@ class Builder {
       if (!raw) return undefined
       return this.parse(raw, toValues(top?.blackboard), `${serverPrefix(server)}幹員 ${id} 特性`)
     }
-    const base = this.stage({ kind: 'base' }, `${id} 特性`, traitRuns)
+    const base = this.stage(id, { kind: 'trait' }, { kind: 'base' }, traitRuns)
     if (!base) return undefined
     const stages: IndexStage[] = [base]
     for (const m of modules) {
       const trait = m.trait
       if (!trait) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 特性 模組3 ${m.equip.uniEquipId}`, (server) => {
+      const stage = this.stage(id, { kind: 'trait' }, { kind: 'module', module: m.equip.uniEquipId }, (server) => {
         if (server !== 'cn') return undefined
         const where = `模組 ${m.equip.uniEquipId} 特性`
         const values = toValues(trait.blackboard)
@@ -457,7 +480,7 @@ class Builder {
     const visible = (server: Server) =>
       (this.char(server, id)?.talents?.[index]?.candidates ?? []).filter((c) => !c.isHideTalent && c.description)
     const stages: IndexStage[] = []
-    const base = this.stage({ kind: 'base' }, `${id} 天賦${no}`, (server) => {
+    const base = this.stage(id, { kind: 'talent', no }, { kind: 'base' }, (server) => {
       const candidates = visible(server)
       if (candidates.length === 0) return undefined
       return this.talentRuns(candidates, (c) => c.description!, `${serverPrefix(server)}幹員 ${id} 天賦${no}`)
@@ -466,7 +489,7 @@ class Builder {
     for (const m of modules) {
       const rewrite = m.talents.get(index)
       if (!rewrite) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 天賦${no} 模組3 ${m.equip.uniEquipId}`, (server) =>
+      const stage = this.stage(id, { kind: 'talent', no }, { kind: 'module', module: m.equip.uniEquipId }, (server) =>
         server === 'cn' ? this.talentRuns(rewrite, (c) => c.upgradeDescription!, `模組 ${m.equip.uniEquipId} 天賦${no}`) : undefined,
       )
       if (stage) stages.push(stage)
@@ -486,7 +509,7 @@ class Builder {
     for (const m of modules) {
       const added = m.talents.get(-1)
       if (!added) continue
-      const stage = this.stage({ kind: 'module', module: m.equip.uniEquipId }, `${id} 天賦${no} 模組3 ${m.equip.uniEquipId}`, (server) =>
+      const stage = this.stage(id, { kind: 'talent', no }, { kind: 'module', module: m.equip.uniEquipId }, (server) =>
         server === 'cn' ? this.talentRuns(added, (c) => c.upgradeDescription!, `模組 ${m.equip.uniEquipId} 新增天賦`) : undefined,
       )
       if (!stage) continue
@@ -546,17 +569,19 @@ class Builder {
   }
 
   /** 以產生器分別產生陸服與台服文字,組成一個階段。陸服沒有這段敘述時回傳 undefined。 */
-  stage(head: Pick<IndexStage, 'kind' | 'module'>, where: string, produce: Producer): IndexStage | undefined {
+  stage(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, head: Pick<IndexStage, 'kind' | 'module'>, produce: Producer): IndexStage | undefined {
     const cnRuns = produce('cn')
     if (!cnRuns) return undefined
+    const where = whereOf(owner, entry, head)
     const stage: IndexStage = { ...head, cn: this.finish(cnRuns, 'cn', where) }
     const twRuns = this.input.tw ? produce('tw') : undefined
     if (twRuns) {
-      const marked = markSupplements(twRuns, this.matchers.tw)
+      const marked = markTextMatches(twRuns, this.matchers.tw)
       if (signature(marked) === signature(stage.cn.runs)) {
         // 與陸服一致:沿用陸服的效果類型,陸服模式可改顯示繁中
         stage.tw = { runs: marked, hits: structuredClone(stage.cn.hits) }
         stage.twSame = true
+        this.warnTwOverrideMismatch(marked, stage.cn.hits, where)
       } else {
         stage.tw = this.finish(twRuns, 'tw', `${where}(台服)`)
       }
@@ -564,12 +589,23 @@ class Builder {
     return stage
   }
 
+  warnTwOverrideMismatch(twRuns: Run[], cnHits: IndexText['hits'], where: string) {
+    const hash = textHash(plainText(twRuns))
+    for (const [keyword, cnTypes] of Object.entries(cnHits)) {
+      const override = this.input.overrides?.[`${hash}:${keyword}`]
+      if (!override) continue
+      const twTypes = sortTypes(override.types)
+      if (twTypes.join() === cnTypes.join()) continue
+      this.warn(`幹員 ${where}:台服與陸服文字一致,沿用陸服判定;${keyword} 的台服覆寫判定(${typeLabels(twTypes)})與陸服(${typeLabels(cnTypes)})不同`)
+    }
+  }
+
   /**
    * 解析完成的 runs → 索引文字:標出補充關鍵字,判定每個關鍵字的效果類型
    * (覆寫檔優先,否則用規則判定,判定不出時為空清單;覆寫檔沒有的配對列入待複核清單)。
    */
   finish(parsed: Run[], server: Server, where: string): IndexText {
-    const runs = markSupplements(parsed, this.matchers[server])
+    const runs = markTextMatches(parsed, this.matchers[server])
     const text = plainText(runs)
     const hash = textHash(text)
     const hits: IndexText['hits'] = {}
@@ -785,6 +821,10 @@ function signature(runs: Run[]): string {
   return JSON.stringify([terms, numbers, sups])
 }
 
+function typeLabels(types: EffectType[]): string {
+  return types.map((t) => EFFECT_TYPE_LABELS[t]).join('、') || '無'
+}
+
 /** 敘述文字的雜湊:覆寫檔的鍵。文字一變,雜湊就變,配對就重新列入待複核。 */
 function textHash(text: string): string {
   return createHash('sha1').update(text).digest('hex').slice(0, 16)
@@ -793,7 +833,8 @@ function textHash(text: string): string {
 export function buildIndex(input: BuildInput): BuildOutput {
   const builder = new Builder(input)
   const index = builder.build()
-  return { index, operatorFiles: builder.operatorFiles, warnings: builder.warnings, pending: [...builder.pending.values()] }
+  const suspects = auditSuspects(builder.operatorFiles, auditTargets(input, builder.keywordTerms, builder.warn))
+  return { index, operatorFiles: builder.operatorFiles, warnings: builder.warnings, pending: [...builder.pending.values()], suspects }
 }
 
 /**

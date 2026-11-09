@@ -1,0 +1,20 @@
+[
+  { "id": "ba.stun", "cn": ["晕眩"], "tw": ["暈眩"] },
+  { "id": "ba.root", "cn": ["束缚"], "tw": ["束縛"] },
+  { "id": "ba.levitate", "cn": ["浮空"], "tw": ["浮空"] },
+  { "id": "ba.frozen", "cn": ["冻结"], "tw": ["凍結"] },
+  { "id": "ba.sluggish", "cn": ["停顿"], "tw": ["停頓"] },
+  { "id": "ba.shield", "cn": ["护盾"], "tw": ["護盾"] },
+  { "id": "ba.camou", "cn": ["迷彩"], "tw": ["迷彩"] },
+  { "id": "ba.debuff", "cn": ["异常状态"], "tw": ["異常狀態"] },
+  { "id": "ba.fragile", "cn": ["脆弱"], "tw": ["脆弱"] },
+  { "id": "ba.invisible", "cn": ["隐匿"], "tw": ["隱匿"] },
+  { "id": "ba.inspire", "cn": ["鼓舞"], "tw": ["鼓舞"] },
+  { "id": "ba.permanentatk", "cn": ["持续攻击"], "tw": ["持續攻擊"] },
+  { "id": "ba.dt.element", "cn": ["元素损伤"], "tw": ["元素損傷"] },
+  { "id": "ba.magicfragile", "cn": ["法术脆弱"], "tw": ["法術脆弱"] },
+  { "id": "ba.physicfragile", "cn": ["物理脆弱"], "tw": ["物理脆弱"] },
+  { "id": "ba.elementfragile", "cn": ["元素脆弱"], "tw": ["元素脆弱"] },
+  { "id": "ba.physhield", "cn": ["物理护盾"], "tw": ["物理護盾"] },
+  { "id": "ba.barrier", "cn": ["屏障效果"], "tw": ["屏障效果"] }
+]

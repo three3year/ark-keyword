@@ -18,7 +18,7 @@ npm run test:e2e     # Playwright 煙霧測試(桌機與手機寬度;先 npm run
 ## 更新遊戲資料
 
 在 Claude Code session 裡輸入 `/update-data`(或說「強制」照樣完整跑):比對上游版本、建置索引、效果類型複核、
-新術語分組、新警告、單元測試與 e2e,最後整次更新放在一個 commit(不 push)。步驟見
+新術語分組、新警告、新疑似漏標、單元測試與 e2e,最後整次更新放在一個 commit(不 push)。步驟見
 [.claude/skills/update-data/SKILL.md](.claude/skills/update-data/SKILL.md)。
 
 不在 session 時手動更新:
@@ -28,9 +28,10 @@ npm run check-upstream         # 比對兩服上游與索引的資料版本,最�
 npm run build-index            # 重新下載陸服與台服資料、頭像與技能圖示,產出 public/data/(索引與幹員檔)
 npm run build-index:offline    # 沿用 .cache/ 已下載的資料
 npm run accept-warnings        # 把已知警告清單改成最近一次建置的全部警告
+npm run accept-suspects        # 把已知疑似漏標清單改成最近一次建置的全部疑似漏標
 ```
 
-接著依下一節複核效果類型、把「未分組」的術語排進 `data/keyword-groups.json`,再跑 `npm test`、`npm run build`、`npm run test:e2e`。
+接著依下一節複核效果類型、把「未分組」的術語排進 `data/keyword-groups.json`、處理新的疑似漏標,再跑 `npm test`、`npm run build`、`npm run test:e2e`。
 
 建置會輸出:
 
@@ -38,8 +39,14 @@ npm run accept-warnings        # 把已知警告清單改成最近一次建置�
 - `review/new-warnings.json`:已知警告清單(`data/known-warnings.json`)裡沒有的新警告。
 - `review/resolved-warnings.json`:已知警告清單裡有、這次沒出現的警告(上游已修好)。
 - `review/pending-review.json`:效果類型還沒複核的「敘述 × 關鍵字」配對(覆寫檔裡沒有的)。
+- `review/suspects.json`:全部疑似漏標:術語名稱或稽核種子字出現在沒有標記的地方,而且整段敘述都沒標到該關鍵字。伺服器、關鍵字、前後文(數字換成「#」)相同的合成一則。
+- `review/new-suspects.json`:已知疑似漏標清單(`data/known-suspects.json`)裡沒有的新疑似漏標。
+- `review/resolved-suspects.json`:已知疑似漏標清單裡有、這次沒出現的(已經標到或文字改了)。
 
 確認新警告都是上游資料的問題後,執行 `npm run accept-warnings`,下次建置就只列出新的警告。
+
+新疑似漏標逐則判斷:真的漏標,就把比對字串加進 `data/term-matches.json`(術語)或 `data/supplementary-keywords.json`(補充關鍵字),
+離線重建後複核新的配對;其餘(誤中,例如地名「拉特蘭」的「拉」)執行 `npm run accept-suspects`,下次建置就只列出新的疑似漏標。
 
 資料來源:陸服 [Kengxxiao/ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)、
 台服 [arkntools/arknights-data-tw-for-maa](https://github.com/arkntools/arknights-data-tw-for-maa)、
@@ -66,12 +73,15 @@ npm run accept-warnings        # 把已知警告清單改成最近一次建置�
 | --- | --- |
 | `keyword-groups.json` | 關鍵字面板的分組與行:每組由多行組成,每行是一串關鍵字 id(術語或 `sup.<id>` 補充關鍵字),順序就是面板順序。沒列到的術語或補充關鍵字會出現在「未分組」。 |
 | `supplementary-keywords.json` | 補充關鍵字:名稱、簡中與繁中比對字串、定義(顯示為「非官方」)。新增一筆即可,不用改程式;要排進面板的哪一行,改 `keyword-groups.json`。 |
+| `term-matches.json` | 術語比對清單:遊戲漏標的術語,每筆是術語 id 加上簡中與繁中比對字串。建置時和補充關鍵字一起比對純文字(較長的優先,已有標記的字不重疊),補上的標記用官方名稱與定義。id 必須是會成為關鍵字的戰鬥術語(`ba.` 開頭、不在 `excluded-terms.json`),否則報建置警告、這筆不比對。 |
 | `effect-overrides.json` | 效果類型覆寫檔(由 `build/applyReview.ts` 維護)。 |
 | `excluded-terms.json` | 談不上效果類型、不當關鍵字的術語 id(隊伍名、綁定、部署費用下限等)。不進關鍵字面板,敘述中顯示為一般文字。新增一個 id 即可。 |
 | `prts-pages.json` | 幹員 id → PRTS 頁名。結果卡的幹員名稱預設連到陸服名的 PRTS 頁;陸服名與其他幹員重複(例如阿米婭的職業形態)時必須在這裡照 PRTS 實際頁名指定,否則建置失敗。 |
 | `tw-power-names.json` | 台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表),照台服遊戲實際用字。台服用到的勢力 ID 不在這裡時報建置警告,畫面暫用陸服的簡體名稱;新增一筆即可。 |
 | `power-list.json` | 勢力分組可選的勢力:由行組成(國家、組織、團隊各一行),每行是一串勢力 id,順序就是面板順序。項目可寫成 `{ "id": "sui", "cn": "岁", "tw": "歲" }` 另給各伺服器的顯示名稱,沒給時用該伺服器的勢力名稱。目前伺服器沒有成員的勢力不出現在面板上。 |
 | `known-warnings.json` | 已知警告清單:確認是上游資料問題的建置警告全文(可含換行)。建置只把清單裡沒有的列為新警告。由 `npm run accept-warnings` 維護,不手動編輯。 |
+| `audit-seeds.json` | 稽核種子字清單:補充關鍵字 id → 一組種子字(兩服的字寫在一起),建置掃描疑似漏標時用。術語不用列,直接用兩服官方名稱。新增補充關鍵字時要在這裡給種子字,否則報建置警告。 |
+| `known-suspects.json` | 已知疑似漏標清單:確認不必補的疑似漏標識別鍵(`<伺服器> <關鍵字> <前後文>`)。建置只把清單裡沒有的列為新疑似漏標。由 `npm run accept-suspects` 維護,不手動編輯。 |
 
 ## 已知的近似
 

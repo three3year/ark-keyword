@@ -31,6 +31,10 @@ export function isBattleTerm(termId: string): boolean {
   return termId.startsWith('ba.')
 }
 
+export function isKeywordTerm(termId: string, excluded: Set<string>): boolean {
+  return isBattleTerm(termId) && !excluded.has(termId)
+}
+
 export function toValues(blackboard: RawBlackboard, extra?: Record<string, number>): Values {
   const values: Values = new Map()
   if (Array.isArray(blackboard)) {
