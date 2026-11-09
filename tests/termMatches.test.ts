@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type TermMatch, buildIndex } from '../build/buildIndex'
 import { query } from '../src/core/query'
-import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
+import { applying, COMMON_TERMS, basicSkill, highlights, operator, overrideKeyOf, plain, server } from './fixtures'
 
 const termMatches: TermMatch[] = [
   { id: 'ba.stun', cn: ['晕眩'], tw: ['暈眩'] },
@@ -24,17 +24,23 @@ describe('術語補標', () => {
     expect(highlights(runs)).toEqual([['晕眩', 'ba.stun']])
   })
 
-  test('台服沒標、陸服有標時,台服模式也找得到,並沿用陸服的效果類型', () => {
-    const { index, pending } = buildIndex({
+  describe('台服沒標、陸服有標', () => {
+    const input = {
       cn: fixture({ 甲: '攻击使敌人<$ba.stun>晕眩</>2秒' }),
       tw: fixture({ 甲: '攻擊使敵人暈眩2秒' }),
       termMatches,
       overrides: {},
+    }
+
+    test('台服模式也找得到,並沿用陸服的效果類型', () => {
+      const [r] = query(buildIndex(input).index, { conditions: applying('ba.stun'), server: 'tw' })
+      expect(r.name).toBe('甲')
+      expect(highlights(r.entries[0].stages[0].runs)).toEqual([['暈眩', 'ba.stun']])
     })
-    const [r] = query(index, { conditions: applying('ba.stun'), server: 'tw' })
-    expect(r.name).toBe('甲')
-    expect(highlights(r.entries[0].stages[0].runs)).toEqual([['暈眩', 'ba.stun']])
-    expect(pending.map((p) => p.text)).toEqual(['攻击使敌人晕眩2秒'])
+
+    test('補標後兩服一致,台服沿用陸服判定,不另列待複核', () => {
+      expect(buildIndex(input).pending.map((p) => p.text)).toEqual(['攻击使敌人晕眩2秒'])
+    })
   })
 
   test('已有官方標記的敘述裡,重複出現的同名術語也被標', () => {
@@ -62,7 +68,7 @@ describe('術語補標', () => {
   describe('台服只因少標而與陸服不一致的敘述', () => {
     const cn = fixture({ 甲: '攻击<$ba.stun>晕眩</>的敌人时伤害提升' })
     const tw = fixture({ 甲: '攻擊暈眩的敵人時傷害提升' })
-    const twKey = buildIndex({ cn: fixture({ 甲: '攻擊<$ba.stun>暈眩</>的敵人時傷害提升' }) }).pending[0].key
+    const twKey = overrideKeyOf(fixture({ 甲: '攻擊<$ba.stun>暈眩</>的敵人時傷害提升' }))
 
     test('補標後台服沿用陸服的效果類型', () => {
       const { index, warnings } = buildIndex({ cn, tw, termMatches })

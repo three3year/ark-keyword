@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { type Overrides, buildIndex } from '../build/buildIndex'
 import { availableTypes, defaultType, query } from '../src/core/query'
 import { EFFECT_TYPES, type EffectType, type SearchIndex, type Server } from '../src/core/types'
-import { COMMON_TERMS, basicSkill, operator, server } from './fixtures'
+import { COMMON_TERMS, basicSkill, operator, overrideKeyOf, server } from './fixtures'
 
 const DODGE = { id: 'dodge', name: '閃避', cn: ['闪避'], tw: ['閃避'], definition: '使攻擊無效' }
 const PULL = { id: 'pull', name: '拉', cn: ['拖拽'], tw: ['拖拽'], definition: '把敵人拉近' }
@@ -216,7 +216,7 @@ describe('覆寫檔與待複核清單', () => {
 describe('兩服一致時的台服覆寫差異警告', () => {
   const cnText = '使敌人<$ba.cold>寒冷</>'
   const twText = '使敵人<$ba.cold>寒冷</>'
-  const twKey = buildIndex({ cn: fixture({ 甲: twText }) }).pending[0].key
+  const twKey = overrideKeyOf(fixture({ 甲: twText }))
 
   function build(overrides?: Overrides) {
     return buildIndex({ cn: fixture({ 甲: cnText }), tw: fixture({ 甲: twText }), overrides })

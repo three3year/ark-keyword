@@ -343,5 +343,13 @@ export function operatorDetailOf(raw: BuildInput, id: string, opts: { server?: S
   return operatorDetail(file, { server: opts.server ?? 'cn', conditions: opts.conditions ?? [], branchName: branchName(index, op) })
 }
 
+/**
+ * 敘述在覆寫檔裡的鍵:把只有一段、帶一個關鍵字的敘述當陸服建置一次,取待複核配對的鍵。
+ * 覆寫檔的鍵只看文字與關鍵字、不分伺服器,所以台服文字也用這個方法取得鍵。
+ */
+export function overrideKeyOf(raw: RawServer): string {
+  return buildIndex({ cn: raw }).pending[0].key
+}
+
 /** 阿米婭三個職業形態的陸服名都是「阿米娅」,PRTS 頁名要另外對照。 */
 export const AMIYA_PRTS_PAGES = { char_002_amiya: '阿米娅', char_1001_amiya2: '阿米娅(近卫)', char_1037_amiya3: '阿米娅(医疗)' }

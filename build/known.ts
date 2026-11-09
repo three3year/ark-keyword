@@ -1,9 +1,12 @@
 import { join } from 'node:path'
-
-const ROOT = join(import.meta.dirname, '..')
+import { REVIEW_DIR, ROOT } from './paths'
 
 export interface KnownList {
-  name: string
+  /** 項目的稱呼,例如「警告」;維護者清單稱為「已知」加上它。 */
+  noun: string
+  newNoun: string
+  /** 這次建置的完整清單。 */
+  all: string
   /** 維護者清單,內容是識別鍵的列表。 */
   known: string
   /** 已知清單裡沒有的;每項是識別鍵,或帶識別鍵 key 的物件。 */
@@ -15,16 +18,20 @@ export interface KnownList {
 export const KNOWN_LISTS = {
   /** 警告以全文當識別鍵。 */
   warnings: {
-    name: '已知警告',
+    noun: '警告',
+    newNoun: '新警告',
+    all: join(REVIEW_DIR, 'build-warnings.txt'),
     known: join(ROOT, 'data', 'known-warnings.json'),
-    added: join(ROOT, 'review', 'new-warnings.json'),
-    resolved: join(ROOT, 'review', 'resolved-warnings.json'),
+    added: join(REVIEW_DIR, 'new-warnings.json'),
+    resolved: join(REVIEW_DIR, 'resolved-warnings.json'),
   },
   suspects: {
-    name: '已知疑似漏標',
+    noun: '疑似漏標',
+    newNoun: '新的疑似漏標',
+    all: join(REVIEW_DIR, 'suspects.json'),
     known: join(ROOT, 'data', 'known-suspects.json'),
-    added: join(ROOT, 'review', 'new-suspects.json'),
-    resolved: join(ROOT, 'review', 'resolved-suspects.json'),
+    added: join(REVIEW_DIR, 'new-suspects.json'),
+    resolved: join(REVIEW_DIR, 'resolved-suspects.json'),
   },
 } satisfies Record<string, KnownList>
 
