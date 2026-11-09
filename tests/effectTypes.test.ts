@@ -213,6 +213,32 @@ describe('覆寫檔與待複核清單', () => {
   })
 })
 
+describe('兩服一致時的台服覆寫差異警告', () => {
+  const cnText = '使敌人<$ba.cold>寒冷</>'
+  const twText = '使敵人<$ba.cold>寒冷</>'
+  /** 台服文字的覆寫鍵:把台服文字單獨當陸服建置時,待複核清單給的鍵。 */
+  const twKey = buildIndex({ cn: fixture({ 甲: twText }) }).pending[0].key
+
+  function build(overrides?: Overrides) {
+    return buildIndex({ cn: fixture({ 甲: cnText }), tw: fixture({ 甲: twText }), overrides })
+  }
+
+  test('台服覆寫判定和沿用的陸服效果類型不同時發警告,寫出幹員、出處、關鍵字與兩邊的判定', () => {
+    const { warnings } = build({ [twKey]: { types: ['exploit'], reviewed: true } })
+    expect(warnings).toEqual(['幹員 char_400_x 技能1 max:台服與陸服文字一致,沿用陸服判定;ba.cold 的台服覆寫判定(利用)與陸服(施加)不同'])
+  })
+
+  test('台服覆寫判定與陸服相同,或台服沒有覆寫判定時,不發警告', () => {
+    expect(build({ [twKey]: { types: ['apply'], reviewed: true } }).warnings).toEqual([])
+    expect(build().warnings).toEqual([])
+  })
+
+  test('有差異時效果類型照樣沿用陸服的,台服搜尋結果不變', () => {
+    const { index } = build({ [twKey]: { types: ['exploit'], reviewed: true } })
+    expect(typesFound(index, 'ba.cold', 'tw')).toEqual(['apply'])
+  })
+})
+
 describe('類型鈕反灰:關鍵字在目前伺服器有資料的效果類型', () => {
   const operators = {
     char_401_a: operator({ name: '兩服都有', skills: ['sk_a'] }),
