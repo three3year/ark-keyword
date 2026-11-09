@@ -103,6 +103,14 @@ describe('漏標稽核:補充關鍵字', () => {
     ])
   })
 
+  test('效果類型為空而拿掉標記的敘述不列;另一段沒標到、含種子字的敘述照樣列', () => {
+    const cn = oneSkillPerOperator({ char_001_a: '自身被推开时攻击力提升', char_002_b: '将敌人向后推动一段距离' })
+    const input: BuildInput = { cn, supplements, auditSeeds: { knockback: ['推'] } }
+    const key = buildIndex(input).pending[0].key
+    const { suspects } = buildIndex({ ...input, overrides: { [key]: { types: [], reviewed: true } } })
+    expect(suspects.map((s) => [s.context, s.operators])).toEqual([['将敌人向后推动一段距离', ['char_002_b']]])
+  })
+
   test.each([
     ['沒寫種子字', {}],
     ['種子字是空的', { knockback: [] }],
