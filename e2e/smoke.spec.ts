@@ -390,6 +390,24 @@ test('關鍵字面板依分組分行:控場第一行以減速開頭,沉默與失
   expect(await top(1)).toBeGreaterThan(await top(0))
 })
 
+test('技力回復:在增益分組緊接鼓舞之後;點了之後列出回技力的幹員,懸停看得到非官方定義', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const buff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '增益', exact: true }) })
+  const names = (await buff.locator('.kw-list').nth(2).locator('.kw').allTextContents()).map((t) => t.trim())
+  expect(names[names.indexOf('鼓舞') + 1]).toBe('技力回復')
+
+  await buff.getByRole('button', { name: '技力回復', exact: true }).click()
+  const cards = page.getByTestId('result-card')
+  for (const name of ['謎圖', '格勞克斯', '荒蕪拉普蘭德'])
+    await expect(cards.filter({ has: page.getByRole('heading', { name, exact: true }) })).toHaveCount(1)
+
+  await cards.first().locator('mark.hl').first().hover()
+  const tip = page.getByTestId('tip')
+  await expect(tip).toContainText('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+  await expect(tip).toContainText('非官方')
+})
+
 test('勢力分組在面板最下面,一行對應清單的一行;陸服有 S.E.E.S.,台服沒有', async ({ page }) => {
   await page.goto('./')
   const panel = page.getByRole('complementary', { name: '關鍵字面板' })

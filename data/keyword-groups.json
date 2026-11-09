@@ -18,7 +18,7 @@
     "rows": [
       ["ba.invisible", "ba.camou", "ba.buffres", "sup.dodge", "ba.liftoff", "ba.float"],
       ["ba.protect", "ba.airprotect", "ba.shield", "ba.barrier", "ba.physhield", "ba.epbarrier", "ba.dmgresistance"],
-      ["ba.berserk", "ba.strong", "ba.inspire", "ba.refraction"]
+      ["ba.berserk", "ba.strong", "ba.inspire", "sup.sprecovery", "ba.refraction"]
     ]
   },
   {
