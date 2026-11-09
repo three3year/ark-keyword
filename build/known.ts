@@ -1,13 +1,8 @@
-// 已知清單:維護者確認過、不必每次都處理的建置警告與疑似漏標。
-// 建置指令(build/cli.ts)把這次的清單與已知清單比對,寫出新出現的與已消失的;
-// build/acceptKnown.ts 據以把已知清單改成這次的全部。
 import { join } from 'node:path'
 
 const ROOT = join(import.meta.dirname, '..')
 
-/** 一份已知清單與建置寫出的兩份比對結果。 */
 export interface KnownList {
-  /** 摘要裡的名稱。 */
   name: string
   /** 維護者清單,內容是識別鍵的列表。 */
   known: string
@@ -25,7 +20,6 @@ export const KNOWN_LISTS = {
     added: join(ROOT, 'review', 'new-warnings.json'),
     resolved: join(ROOT, 'review', 'resolved-warnings.json'),
   },
-  /** 疑似漏標以「伺服器 關鍵字 前後文」當識別鍵。 */
   suspects: {
     name: '已知疑似漏標',
     known: join(ROOT, 'data', 'known-suspects.json'),

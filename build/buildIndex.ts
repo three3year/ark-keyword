@@ -173,7 +173,6 @@ class Builder {
     this.excluded = new Set(input.excludedTerms)
     this.listedPowerIds = listedPowerIds(input.powerList ?? [])
     this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
-    // 術語比對清單與補充關鍵字合在同一輪比對
     const matchers = [...(input.supplements ?? []).map((s) => ({ ...s, id: supplementId(s) })), ...this.validTermMatches()]
     this.matchers = {
       cn: matchers.map((m) => ({ id: m.id, strings: m.cn })),
@@ -181,7 +180,6 @@ class Builder {
     }
   }
 
-  /** 術語比對清單裡會成為關鍵字的戰鬥術語;其他的發警告、不比對,非關鍵字的術語不能經由補標變成關鍵字。 */
   validTermMatches(): TermMatch[] {
     const known = (id: string) => !!(this.input.cn.gamedataConst.termDescriptionDict[id] ?? this.input.tw?.gamedataConst.termDescriptionDict[id])
     return (this.input.termMatches ?? []).filter((m) => {
@@ -588,7 +586,6 @@ class Builder {
     return stage
   }
 
-  /** 兩服一致而沿用陸服判定時,台服自己的覆寫判定若與陸服不同,發警告(判定照樣沿用陸服的)。 */
   warnTwOverrideMismatch(twRuns: Run[], cnHits: IndexText['hits'], where: string) {
     const hash = textHash(plainText(twRuns))
     for (const [keyword, cnTypes] of Object.entries(cnHits)) {

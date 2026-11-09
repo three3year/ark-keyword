@@ -1,7 +1,3 @@
-// 把一份已知清單改成最近一次建置的全部:加入新出現的、移除已消失的(兩者是建置寫在 review/ 的比對結果)。
-//   npm run accept-warnings    已知警告清單 data/known-warnings.json
-//   npm run accept-suspects    已知疑似漏標清單 data/known-suspects.json
-// 維護者確認新出現的都不必處理後,緊接在建置之後執行。
 import { readFile, writeFile } from 'node:fs/promises'
 import { KNOWN_LISTS } from './known'
 

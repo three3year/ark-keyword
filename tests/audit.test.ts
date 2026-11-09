@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest'
 import { type BuildInput, buildIndex } from '../build/buildIndex'
 import { basicSkill, COMMON_TERMS, operator, server } from './fixtures'
 
-/** 每位幹員一個技能,敘述就是技能說明。 */
 function fixture(descriptions: Record<string, string>, terms = COMMON_TERMS) {
   const ids = Object.keys(descriptions)
   const operators = Object.fromEntries(ids.map((id, i) => [id, operator({ name: `幹員${i}`, skills: [`sk_${i}`] })]))

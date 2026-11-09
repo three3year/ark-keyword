@@ -31,7 +31,6 @@ export function isBattleTerm(termId: string): boolean {
   return termId.startsWith('ba.')
 }
 
-/** 會成為關鍵字的戰鬥術語:ba. 開頭、不在不當關鍵字的術語清單裡。 */
 export function isKeywordTerm(termId: string, excluded: Set<string>): boolean {
   return isBattleTerm(termId) && !excluded.has(termId)
 }

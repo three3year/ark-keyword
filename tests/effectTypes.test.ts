@@ -216,7 +216,6 @@ describe('覆寫檔與待複核清單', () => {
 describe('兩服一致時的台服覆寫差異警告', () => {
   const cnText = '使敌人<$ba.cold>寒冷</>'
   const twText = '使敵人<$ba.cold>寒冷</>'
-  /** 台服文字的覆寫鍵:把台服文字單獨當陸服建置時,待複核清單給的鍵。 */
   const twKey = buildIndex({ cn: fixture({ 甲: twText }) }).pending[0].key
 
   function build(overrides?: Overrides) {

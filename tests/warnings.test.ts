@@ -48,7 +48,6 @@ describe('已知清單比對:警告', () => {
 })
 
 describe('已知清單比對:疑似漏標', () => {
-  /** 每段技能敘述各給一位幹員,回傳全部疑似漏標的識別鍵。 */
   function suspectKeysOf(descriptions: string[]): string[] {
     const skills = descriptions.map((description, i) => basicSkill(`sk_x_${i}`, '技', { description }))
     const operators = Object.fromEntries(skills.map((s, i) => [`char_00${i}_x`, operator({ name: `幹員${i}`, skills: [s.skillId] })]))

@@ -34,7 +34,6 @@ describe('術語補標', () => {
     const [r] = query(index, { conditions: applying('ba.stun'), server: 'tw' })
     expect(r.name).toBe('甲')
     expect(highlights(r.entries[0].stages[0].runs)).toEqual([['暈眩', 'ba.stun']])
-    // 補標後兩服一致:台服沿用陸服判定,不另列待複核
     expect(pending.map((p) => p.text)).toEqual(['攻击使敌人晕眩2秒'])
   })
 
@@ -63,7 +62,6 @@ describe('術語補標', () => {
   describe('台服只因少標而與陸服不一致的敘述', () => {
     const cn = fixture({ 甲: '攻击<$ba.stun>晕眩</>的敌人时伤害提升' })
     const tw = fixture({ 甲: '攻擊暈眩的敵人時傷害提升' })
-    /** 台服文字的覆寫鍵:把台服文字單獨當陸服建置時,待複核清單給的鍵。 */
     const twKey = buildIndex({ cn: fixture({ 甲: '攻擊<$ba.stun>暈眩</>的敵人時傷害提升' }) }).pending[0].key
 
     test('補標後台服沿用陸服的效果類型', () => {
