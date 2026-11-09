@@ -152,7 +152,7 @@ function resultOperator(op: IndexOperator, branch: string, opts: QueryOptions): 
     if (!stages.some((s) => s.hit)) continue
     entries.push(resultEntry(entry, summon, withAbsentBase(entry, stages), branch))
   }
-  // 搜尋條件一律 OR:有任一命中敘述就列入;沒有搜尋條件(只有職業條件)時全部列入,命中敘述為空
+  // 搜尋條件一律 OR:有任一命中敘述就列入;沒有搜尋條件(只有職業或勢力條件)時全部列入,命中敘述為空
   if (entries.length === 0 && opts.conditions.length > 0) return undefined
   const result: ResultOperator = {
     id: op.id,
@@ -172,7 +172,13 @@ function resultOperator(op: IndexOperator, branch: string, opts: QueryOptions): 
 function passesFilters(op: IndexOperator, opts: QueryOptions): boolean {
   if (opts.rarities?.length && !opts.rarities.includes(op.rarity)) return false
   if (opts.professions?.length && !opts.professions.includes(op.profession)) return false
+  if (opts.powers?.length && !powersOn(op, opts.server).some((p) => opts.powers!.includes(p))) return false
   return true
+}
+
+/** 幹員在該伺服器所屬的清單內勢力。 */
+function powersOn(op: IndexOperator, server: Server): string[] {
+  return op.powers ? onServer(op.powers, server) : []
 }
 
 /** 星級高到低,再依職業、分支(都是遊戲內順序),最後實裝新到舊。 */
@@ -282,16 +288,16 @@ function detailPowers(p: OperatorPowers): Pick<OperatorDetail, 'power' | 'hidden
   return out
 }
 
-/** 有搜尋條件或職業條件其中一種就開始搜尋;只有星級篩選不算。 */
-export function startsSearch(opts: Pick<QueryOptions, 'conditions' | 'professions'>): boolean {
-  return opts.conditions.length > 0 || !!opts.professions?.length
+/** 有搜尋條件、職業條件、勢力條件其中一種就開始搜尋;只有星級篩選不算。 */
+export function startsSearch(opts: Pick<QueryOptions, 'conditions' | 'professions' | 'powers'>): boolean {
+  return opts.conditions.length > 0 || !!opts.professions?.length || !!opts.powers?.length
 }
 
 export function query(index: SearchIndex, opts: QueryOptions): ResultOperator[] {
   if (!startsSearch(opts)) return []
   const results: ResultOperator[] = []
   for (const op of [...index.operators].sort(compareOperators(index))) {
-    // 台服模式略過台服未實裝的幹員;只有職業條件時不會因為沒有命中敘述而被濾掉,要在這裡擋
+    // 台服模式略過台服未實裝的幹員;只有職業或勢力條件時不會因為沒有命中敘述而被濾掉,要在這裡擋
     if (opts.server === 'tw' && !op.inTw) continue
     if (!passesFilters(op, opts)) continue
     const r = resultOperator(op, branchName(index, op), opts)
@@ -388,6 +394,30 @@ export function keywordGroups(index: SearchIndex, server: Server): PanelGroup[] 
         .filter((row) => row.length > 0),
     }))
     .filter((g) => g.rows.length > 0)
+}
+
+export interface PanelPower {
+  id: string
+  /** 目前伺服器的顯示名稱。 */
+  name: string
+}
+
+/** 勢力在某伺服器的顯示名稱;不在清單的勢力用 id。 */
+export function powerName(index: SearchIndex, server: Server, id: string): string {
+  const power = index.powerRows.flat().find((p) => p.id === id)
+  return power ? onServer(power.name, server) : id
+}
+
+/**
+ * 勢力面板:依清單的行,列出目前伺服器至少有一位成員的勢力(台服模式只算台服已實裝的幹員);拿掉後變空的行不列。
+ * 星級篩選、職業條件、搜尋條件不影響面板。
+ */
+export function powerPanel(index: SearchIndex, server: Server): PanelPower[][] {
+  const withMembers = new Set<string>()
+  for (const op of index.operators) if (server === 'cn' || op.inTw) for (const p of powersOn(op, server)) withMembers.add(p)
+  return index.powerRows
+    .map((row) => row.filter((p) => withMembers.has(p.id)).map((p) => ({ id: p.id, name: onServer(p.name, server) })))
+    .filter((row) => row.length > 0)
 }
 
 export interface FooterItem {

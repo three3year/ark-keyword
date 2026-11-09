@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { loadIndex } from './core/loadIndex'
-import { availableTypes, branchName, defaultType, filterOptions, footerItems, query, startsSearch } from './core/query'
+import { availableTypes, branchName, defaultType, filterOptions, footerItems, powerName, query, startsSearch } from './core/query'
 import {
   EFFECT_TYPE_LABELS,
   EFFECT_TYPES,
@@ -58,7 +58,9 @@ const rarities = ref<number[]>([])
 const professions = ref<Profession[]>([])
 /** 職業條件依遊戲內職業順序,不依點選先後。 */
 const sortedProfessions = computed(() => PROFESSIONS.filter((p) => professions.value.includes(p)))
-const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value }))
+/** 勢力條件(勢力 id):彼此 OR,與搜尋條件、職業條件 AND;切換伺服器不改。 */
+const powers = ref<string[]>([])
+const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value, powers: powers.value }))
 // 窄螢幕上關鍵字面板收合成抽屜
 const drawerOpen = ref(false)
 
@@ -80,6 +82,7 @@ const results = computed(() =>
         server: server.value,
         rarities: rarities.value,
         professions: professions.value,
+        powers: powers.value,
       })
     : [],
 )
@@ -122,6 +125,15 @@ function remove(id: string) {
 
 function removeProfession(p: Profession) {
   professions.value = professions.value.filter((x) => x !== p)
+}
+
+/** 面板的勢力鈕:未選就加入,已選就移除。 */
+function togglePower(id: string) {
+  powers.value = powers.value.includes(id) ? powers.value.filter((x) => x !== id) : [...powers.value, id]
+}
+
+function powerLabel(id: string): string {
+  return index.value ? powerName(index.value, server.value, id) : id
 }
 
 /** chip 上的類型鈕:切換該類型;關掉最後一顆等於移除 chip。 */
@@ -277,15 +289,26 @@ onBeforeUnmount(() => {
           <strong>關鍵字</strong>
           <button class="btn" @click="drawerOpen = false">完成</button>
         </div>
-        <KeywordPanel :index="index" :server="server" :selected="selected" @toggle="toggle" />
+        <KeywordPanel
+          :index="index"
+          :server="server"
+          :selected="selected"
+          :powers="powers"
+          @toggle="toggle"
+          @toggle-power="togglePower"
+        />
       </aside>
       <section class="results">
         <FilterBar v-model:rarities="rarities" v-model:professions="professions" :options="options" />
-        <!-- 職業 chip 一行在上、搜尋條件 chip 在下 -->
-        <div v-if="sortedProfessions.length > 0" class="chips">
+        <!-- 職業與勢力 chip 一行在上(職業在前)、搜尋條件 chip 在下 -->
+        <div v-if="sortedProfessions.length > 0 || powers.length > 0" class="chips">
           <span v-for="p in sortedProfessions" :key="p" class="chip profession-chip" data-testid="profession-chip">
             <span class="profession-name">{{ PROFESSION_LABELS[p] }}</span>
             <button class="chip-x" :aria-label="`移除 ${PROFESSION_LABELS[p]}`" @click.stop="removeProfession(p)">×</button>
+          </span>
+          <span v-for="p in powers" :key="p" class="chip power-chip" data-testid="power-chip">
+            <span class="power-name">{{ powerLabel(p) }}</span>
+            <button class="chip-x" :aria-label="`移除 ${powerLabel(p)}`" @click.stop="togglePower(p)">×</button>
           </span>
         </div>
         <div v-if="selection.length > 0" class="chips">
@@ -322,7 +345,7 @@ onBeforeUnmount(() => {
               <li v-for="c in emptyConditions" :key="c">{{ c }}</li>
             </ul>
           </div>
-          <!-- 只有職業條件時結果卡只有卡頭:排成多欄的小卡 -->
+          <!-- 只有職業或勢力條件時結果卡只有卡頭:排成多欄的小卡 -->
           <div class="result-list" :class="{ compact: conditions.length === 0 }" data-testid="result-list">
             <ResultCard
               v-for="op in results"

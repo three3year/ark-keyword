@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { cnOnly, groupRowNames, keywordName } from './data'
+import { cnOnly, groupRowNames, keywordName, powerDisplayName, powerListRows } from './data'
 
 test('點一個關鍵字後看到結果卡,切換伺服器後結果更新', async ({ page }) => {
   await page.goto('./')
@@ -393,4 +393,51 @@ test('技力回復:在增益分組緊接鼓舞之後;點了之後列出回技力
   const tip = page.getByTestId('tip')
   await expect(tip).toContainText('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
   await expect(tip).toContainText('非官方')
+})
+
+test('勢力分組在面板最下面,一行對應清單的一行;陸服有 S.E.E.S.,台服沒有', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const lastGroup = panel.locator('.kw-group').last()
+  await expect(lastGroup.getByRole('heading')).toHaveText('勢力')
+  const rows = lastGroup.locator('.kw-list')
+  const list = powerListRows()
+  await expect(rows).toHaveCount(list.length)
+  for (const [i, row] of list.entries()) await expect(rows.nth(i).getByRole('button')).toHaveText(row.map((id) => powerDisplayName(id)))
+  await expect(lastGroup.getByRole('button', { name: 'S.E.E.S.', exact: true })).toHaveCount(1)
+
+  await page.getByRole('radio', { name: '台服' }).click()
+  await expect(lastGroup.getByRole('heading')).toHaveText('勢力')
+  await expect(lastGroup.getByRole('button', { name: 'S.E.E.S.', exact: true })).toHaveCount(0)
+  await expect(lastGroup.getByRole('button', { name: powerDisplayName('sui', 'tw'), exact: true })).toHaveCount(1)
+})
+
+test('勢力 chip:點勢力出現 chip 與小卡,在職業 chip 之後;× 與面板勢力鈕連動', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const name = powerDisplayName('kazimierz')
+  const button = panel.getByRole('button', { name, exact: true })
+  const powerChips = page.getByTestId('power-chip')
+
+  // 只有勢力條件就開始搜尋:結果是只有卡頭的小卡
+  await button.click()
+  await expect(button).toHaveAttribute('aria-pressed', 'true')
+  await expect(powerChips).toHaveText([new RegExp(name)])
+  // 勢力 chip 沒有類型鈕,只有 ×
+  await expect(powerChips.getByRole('button')).toHaveCount(1)
+  await expect(page.getByTestId('result-card').first()).toBeVisible()
+  await expect(page.getByTestId('entry')).toHaveCount(0)
+  expect(Number(/\d+/.exec((await page.getByTestId('result-count').textContent()) ?? '')?.[0])).toBeGreaterThan(0)
+
+  // 職業 chip 與勢力 chip 同一行,職業在前
+  await page.getByRole('group', { name: '職業' }).getByRole('button', { name: '近衛', exact: true }).click()
+  const row = page.locator('.chips').filter({ has: powerChips })
+  await expect(row.locator('.chip')).toHaveText([/近衛/, new RegExp(name)])
+
+  // × 移除勢力條件,面板勢力鈕跟著取消;再點面板勢力鈕 chip 再出現
+  await page.getByRole('button', { name: `移除 ${name}` }).click()
+  await expect(powerChips).toHaveCount(0)
+  await expect(button).toHaveAttribute('aria-pressed', 'false')
+  await button.click()
+  await expect(powerChips).toHaveText([new RegExp(name)])
 })

@@ -173,6 +173,8 @@ export interface IndexOperator {
   entries: IndexEntry[]
   /** 這位幹員的幹員檔的相對路徑;檔名帶內容雜湊,資料更新後不會讀到舊版。 */
   detail?: string
+  /** 它所屬的勢力清單內勢力 id(勢力與隱藏勢力),依清單順序;兩服相同或台服未實裝時省略 tw,兩服都沒有時省略整欄。 */
+  powers?: PerServer<string[]>
 }
 
 /** 屬性:最後一個階段滿級的數值,不含潛能與模組的加成。 */
@@ -224,6 +226,12 @@ export interface IndexGroup {
   rows: string[][]
 }
 
+/** 勢力面板上的一個勢力:id 與各伺服器的顯示名稱(維護者覆寫,否則用該伺服器的勢力名稱)。 */
+export interface IndexPower {
+  id: string
+  name: PerServer<string>
+}
+
 /** 某個伺服器遊戲資料的版號,加上建置時下載這份資料的時間。 */
 export interface DataVersion {
   version: string
@@ -238,6 +246,8 @@ export interface SearchIndex {
   keywords: IndexKeyword[]
   /** order 是遊戲內的分支順序(取自陸服);沒有時排在最後。 */
   subProfessions: Record<string, { name: string; profession: Profession; order?: number }>
+  /** 勢力面板:勢力的維護者清單的行,順序就是面板順序;含目前沒有成員的勢力,由面板函式依伺服器濾掉。 */
+  powerRows: IndexPower[][]
   operators: IndexOperator[]
 }
 
@@ -257,6 +267,8 @@ export interface QueryOptions {
   rarities?: number[]
   /** 職業條件:彼此 OR,與搜尋條件 AND;沒有搜尋條件時列出這些職業的全部幹員。 */
   professions?: Profession[]
+  /** 勢力條件(勢力 id):彼此 OR,與搜尋條件、職業條件 AND;依目前伺服器的勢力與隱藏勢力判定。 */
+  powers?: string[]
 }
 
 export interface ResultStage {
