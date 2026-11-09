@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — 勢力條件:面板分組、搜尋與勢力 chip
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] 新的警告類型:天賦或技能的【勢力名】不在清單時發出,訊息寫出幹員、敘述來源與勢力名
 - [x] 沿用已知警告的接受機制
