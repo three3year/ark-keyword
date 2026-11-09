@@ -1,10 +1,11 @@
 // 補充關鍵字:遊戲沒有標記為術語、由維護者清單比對純文字的關鍵字(推、拉、沉默、減速…)。
+// 術語比對清單(遊戲漏標的術語)也走同一輪比對。
 // 比對在整段純文字上進行,所以可以跨越樣式標記;已在術語標記內的文字不比對,避免重複計算。
 import type { Run } from '../src/core/types'
 import { push } from './richText'
 
 export interface SupplementMatcher {
-  /** 關鍵字 id(sup.xxx)。 */
+  /** 關鍵字 id:補充關鍵字為 sup.xxx,術語比對清單為術語 id。 */
   id: string
   strings: string[]
 }

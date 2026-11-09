@@ -66,6 +66,7 @@ npm run accept-warnings        # 把已知警告清單改成最近一次建置�
 | --- | --- |
 | `keyword-groups.json` | 關鍵字面板的分組與行:每組由多行組成,每行是一串關鍵字 id(術語或 `sup.<id>` 補充關鍵字),順序就是面板順序。沒列到的術語或補充關鍵字會出現在「未分組」。 |
 | `supplementary-keywords.json` | 補充關鍵字:名稱、簡中與繁中比對字串、定義(顯示為「非官方」)。新增一筆即可,不用改程式;要排進面板的哪一行,改 `keyword-groups.json`。 |
+| `term-matches.json` | 術語比對清單:遊戲漏標的術語,每筆是術語 id 加上簡中與繁中比對字串。建置時和補充關鍵字一起比對純文字(較長的優先,已有標記的字不重疊),補上的標記用官方名稱與定義。id 必須是會成為關鍵字的戰鬥術語(`ba.` 開頭、不在 `excluded-terms.json`),否則報建置警告、這筆不比對。 |
 | `effect-overrides.json` | 效果類型覆寫檔(由 `build/applyReview.ts` 維護)。 |
 | `excluded-terms.json` | 談不上效果類型、不當關鍵字的術語 id(隊伍名、綁定、部署費用下限等)。不進關鍵字面板,敘述中顯示為一般文字。新增一個 id 即可。 |
 | `prts-pages.json` | 幹員 id → PRTS 頁名。結果卡的幹員名稱預設連到陸服名的 PRTS 頁;陸服名與其他幹員重複(例如阿米婭的職業形態)時必須在這裡照 PRTS 實際頁名指定,否則建置失敗。 |
