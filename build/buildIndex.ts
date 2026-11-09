@@ -31,7 +31,7 @@ import type {
   SummonOrigin,
   Trigger,
 } from '../src/core/types'
-import { PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
+import { EFFECT_TYPE_LABELS, PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
 import { ruleEffectTypes } from './effectType'
 import { withPotentialBonus } from './potential'
 import type {
@@ -557,11 +557,24 @@ class Builder {
         // 與陸服一致:沿用陸服的效果類型,陸服模式可改顯示繁中
         stage.tw = { runs: marked, hits: structuredClone(stage.cn.hits) }
         stage.twSame = true
+        this.warnTwOverrideMismatch(marked, stage.cn.hits, where)
       } else {
         stage.tw = this.finish(twRuns, 'tw', `${where}(台服)`)
       }
     }
     return stage
+  }
+
+  /** 兩服一致而沿用陸服判定時,台服自己的覆寫判定若與陸服不同,發警告(判定照樣沿用陸服的)。 */
+  warnTwOverrideMismatch(twRuns: Run[], cnHits: IndexText['hits'], where: string) {
+    const hash = textHash(plainText(twRuns))
+    for (const [keyword, cnTypes] of Object.entries(cnHits)) {
+      const override = this.input.overrides?.[`${hash}:${keyword}`]
+      if (!override) continue
+      const twTypes = sortTypes(override.types)
+      if (twTypes.join() === cnTypes.join()) continue
+      this.warn(`幹員 ${where}:台服與陸服文字一致,沿用陸服判定;${keyword} 的台服覆寫判定(${typeLabels(twTypes)})與陸服(${typeLabels(cnTypes)})不同`)
+    }
   }
 
   /**
@@ -783,6 +796,10 @@ function signature(runs: Run[]): string {
   const sups = [...new Set(runs.filter((r) => r.k?.startsWith('sup.')).map((r) => r.k))].sort()
   const numbers = plainText(runs).match(NUMBER) ?? []
   return JSON.stringify([terms, numbers, sups])
+}
+
+function typeLabels(types: EffectType[]): string {
+  return types.map((t) => EFFECT_TYPE_LABELS[t]).join('、') || '無'
 }
 
 /** 敘述文字的雜湊:覆寫檔的鍵。文字一變,雜湊就變,配對就重新列入待複核。 */
