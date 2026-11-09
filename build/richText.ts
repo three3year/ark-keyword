@@ -35,6 +35,18 @@ export function isKeywordTerm(termId: string, excluded: Set<string>): boolean {
   return isBattleTerm(termId) && !excluded.has(termId)
 }
 
+/** 補充關鍵字的 id 以 sup. 開頭,與術語 id 區分。 */
+export function isSupplementKeyword(keyword: string): boolean {
+  return keyword.startsWith('sup.')
+}
+
+const OWN_SIDE = /·我方$/
+
+/** 術語名稱去掉「·我方」後綴:「·我方」版與敵方版在敘述裡寫成同一個名稱。 */
+export function withoutOwnSide(termName: string): string {
+  return termName.replace(OWN_SIDE, '')
+}
+
 export function toValues(blackboard: RawBlackboard, extra?: Record<string, number>): Values {
   const values: Values = new Map()
   if (Array.isArray(blackboard)) {
@@ -92,6 +104,8 @@ export function parseRichText(raw: string, ctx: ParseContext): Run[] {
   const text = fillPlaceholders(raw, ctx).replaceAll('\\n', '\n')
   const runs: Run[] = []
   const stack: Open[] = []
+  // 剛開了術語標記、還沒輸出它的文字:下一段帶 k 的文字是新標記的開頭
+  let termOpened = false
 
   const emit = (t: string) => {
     if (!t) return
@@ -103,7 +117,8 @@ export function parseRichText(raw: string, ctx: ParseContext): Run[] {
       // 術語標記包住【】時,括號不算在高亮內
       const m = /^(【?)(.*?)(】?)$/s.exec(t)!
       push(runs, { t: m[1], s })
-      push(runs, { t: m[2], k, s })
+      push(runs, { t: m[2], k, s }, termOpened)
+      if (m[2]) termOpened = false
       push(runs, { t: m[3], s })
     } else {
       push(runs, { t, s })
@@ -121,6 +136,7 @@ export function parseRichText(raw: string, ctx: ParseContext): Run[] {
         emit(buf)
         buf = ''
         stack.push({ kind: open[1] === '@' ? 'style' : 'term', id: open[2] })
+        if (open[1] === '$') termOpened = true
         i += open[0].length
         continue
       }
@@ -144,11 +160,14 @@ export function parseRichText(raw: string, ctx: ParseContext): Run[] {
   return runs
 }
 
-/** 加入一段 run,與前一段屬性相同時合併。 */
-export function push(runs: Run[], run: Run): void {
+/**
+ * 加入一段 run,與前一段屬性相同時合併。startsMark:這段是某個標記(帶 k)的開頭,
+ * 不與前一段合併,相鄰的兩個同 id 標記才分得開(見 markIds)。
+ */
+export function push(runs: Run[], run: Run, startsMark = false): void {
   if (!run.t) return
   const last = runs[runs.length - 1]
-  if (last && last.k === run.k && last.s === run.s && last.p === run.p) {
+  if (last && sameAttributes(last, run) && !(startsMark && run.k)) {
     last.t += run.t
     return
   }
@@ -157,6 +176,32 @@ export function push(runs: Run[], run: Run): void {
   if (run.s) clean.s = run.s
   if (run.p) clean.p = run.p
   runs.push(clean)
+}
+
+function sameAttributes(a: Run, b: Run): boolean {
+  return a.k === b.k && a.s === b.s && a.p === b.p
+}
+
+/**
+ * runs[i] 是否開始一個標記。同一個標記內相鄰的兩段屬性必不相同(相同就被 push 合併了),
+ * 所以帶同一個 k、屬性也完全相同的相鄰兩段,是兩個標記。
+ */
+export function startsMark(runs: Run[], i: number): boolean {
+  const run = runs[i]
+  const prev = runs[i - 1]
+  return !!run.k && (prev?.k !== run.k || sameAttributes(prev, run))
+}
+
+/** 把 runs 分組成標記,依序回傳每個標記的 id。 */
+export function markIds(runs: Run[]): string[] {
+  return runs.flatMap((r, i) => (startsMark(runs, i) ? [r.k!] : []))
+}
+
+/** 逐段改寫 runs,保留標記的邊界。 */
+export function mapRuns(runs: Run[], f: (run: Run) => Run): Run[] {
+  const out: Run[] = []
+  runs.forEach((r, i) => push(out, f(r), startsMark(runs, i)))
+  return out
 }
 
 export function plainText(runs: Run[]): string {

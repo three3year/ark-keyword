@@ -1,5 +1,6 @@
 import type { IndexEntry, IndexStage, OperatorFile, Server } from '../src/core/types'
 import type { BuildInput } from './buildIndex'
+import { withoutOwnSide } from './richText'
 
 /** 維護者清單:補充關鍵字 id(不含 sup.)→ 稽核種子字(兩服的字寫在一起)。 */
 export type AuditSeeds = Record<string, string[]>
@@ -21,7 +22,6 @@ export interface Suspect {
 interface AuditTarget {
   keyword: string
   seeds: string[]
-  /** 整段敘述已標過其中任一個關鍵字,就不掃這段。 */
   satisfiedBy: Set<string>
 }
 
@@ -30,11 +30,12 @@ interface AuditText {
   operator: string
   where: string
   text: string
+  /** 這段敘述的關鍵字配對(hits 的鍵),含效果類型為空、標記已拿掉的配對;keywordAt 只反映實際標記。 */
+  pairedKeywords: string[]
   keywordAt: (string | undefined)[]
 }
 
 const CONTEXT = 8
-const OWN_SIDE = /·我方$/
 
 /** 敘述出現的位置,例如「char_002_amiya 技能1 m3」;待複核清單與疑似漏標共用這個格式。 */
 export function whereOf(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, stage: Pick<IndexStage, 'kind' | 'module'>): string {
@@ -58,7 +59,7 @@ function termTargets(input: BuildInput, ids: Set<string>): AuditTarget[] {
   return [...groups]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([keyword, members]) => {
-      const names = members.flatMap((id) => dicts.map((d) => d[id]?.termName.replace(OWN_SIDE, '')))
+      const names = members.flatMap((id) => dicts.map((d) => d[id] && withoutOwnSide(d[id].termName)))
       return { keyword, seeds: [...new Set(names.filter((n): n is string => !!n))], satisfiedBy: new Set(members) }
     })
 }
@@ -92,7 +93,7 @@ export function auditSuspects(files: OperatorFile[], targets: AuditTarget[]): Su
   return targets.flatMap((target) => {
     const found = new Map<string, Suspect>()
     for (const t of texts) {
-      if (t.keywordAt.some((k) => k && target.satisfiedBy.has(k))) continue
+      if (t.pairedKeywords.some((k) => target.satisfiedBy.has(k))) continue
       for (const seed of target.seeds)
         for (let from = t.text.indexOf(seed); from !== -1; from = t.text.indexOf(seed, from + 1)) {
           if (t.keywordAt.slice(from, from + seed.length).some(Boolean)) continue
@@ -119,11 +120,12 @@ function auditTexts(file: OperatorFile): AuditText[] {
   for (const entry of file.entries)
     for (const stage of entry.stages)
       for (const server of ['cn', 'tw'] as const) {
-        const runs = stage[server]?.runs
-        if (!runs) continue
+        const text = stage[server]
+        if (!text) continue
+        const { runs, hits } = text
         const keywordAt: (string | undefined)[] = []
         for (const r of runs) for (let i = 0; i < r.t.length; i++) keywordAt.push(r.k)
-        out.push({ server, operator: file.id, where: whereOf(entry.summon ?? file.id, entry, stage), text: runs.map((r) => r.t).join(''), keywordAt })
+        out.push({ server, operator: file.id, where: whereOf(entry.summon ?? file.id, entry, stage), text: runs.map((r) => r.t).join(''), pairedKeywords: Object.keys(hits), keywordAt })
       }
   return out
 }

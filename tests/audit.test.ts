@@ -65,9 +65,15 @@ describe('漏標稽核:術語', () => {
   })
 
   test('台服文字用台服的術語名稱掃', () => {
+    const cn = oneSkillPerOperator({ char_001_a: '攻击使敌人晕眩' })
+    const tw = oneSkillPerOperator({ char_001_a: '攻擊使敵人暈眩' }, { 'ba.stun': ['暈眩', '無法行動'] })
+    expect(suspectsOf({ cn, tw }).map((s) => s.key)).toEqual(['cn ba.stun 攻击使敌人晕眩', 'tw ba.stun 攻擊使敵人暈眩'])
+  })
+
+  test('照陸服補標補好的台服文字,不列出', () => {
     const cn = oneSkillPerOperator({ char_001_a: '攻击使敌人<$ba.stun>晕眩</>' })
     const tw = oneSkillPerOperator({ char_001_a: '攻擊使敵人暈眩' }, { 'ba.stun': ['暈眩', '無法行動'] })
-    expect(suspectsOf({ cn, tw }).map((s) => s.key)).toEqual(['tw ba.stun 攻擊使敵人暈眩'])
+    expect(suspectsOf({ cn, tw })).toEqual([])
   })
 
   test('數字不同的同一種前後文合成一則,涉及的幹員全部列出', () => {
@@ -101,6 +107,14 @@ describe('漏標稽核:補充關鍵字', () => {
         where: 'char_001_a 技能1 max',
       },
     ])
+  })
+
+  test('效果類型為空而拿掉標記的敘述不列;另一段沒標到、含種子字的敘述照樣列', () => {
+    const cn = oneSkillPerOperator({ char_001_a: '自身被推开时攻击力提升', char_002_b: '将敌人向后推动一段距离' })
+    const input: BuildInput = { cn, supplements, auditSeeds: { knockback: ['推'] } }
+    const key = buildIndex(input).pending[0].key
+    const { suspects } = buildIndex({ ...input, overrides: { [key]: { types: [], reviewed: true } } })
+    expect(suspects.map((s) => [s.context, s.operators])).toEqual([['将敌人向后推动一段距离', ['char_002_b']]])
   })
 
   test.each([

@@ -1,0 +1,20 @@
+{
+"cn sup.sprecovery 敌人时才能够回复技力": {"verdict":"keep","reason":"重裝特性「只有阻擋敵人時才能夠回復技力」,講自己的技力回復條件,不給別人技力"},
+"tw sup.sprecovery 敵人時才能夠回復技力": {"verdict":"keep","reason":"同上一筆,台服文字"},
+"cn sup.sprecovery 缓慢回复技力，只有阻挡敌人时": {"verdict":"keep","reason":"模組特性講自己的技力回復條件,不給別人技力"},
+"cn sup.sprecovery 有阻挡敌人时恢复技力回复速度": {"verdict":"keep","reason":"模組特性講自己的技力回復條件,不給別人技力"},
+"cn sup.sprecovery 持续到技能结束⏎技力满时可使用装备应": {"verdict":"keep","reason":"「技力滿時可使用」只提到技力,沒有回復效果"},
+"tw sup.sprecovery 持續到技能結束⏎技力滿時可使用裝備應": {"verdict":"keep","reason":"同上一筆,台服文字"},
+"cn sup.sprecovery 未开启技能且技力小于或等于最大值": {"verdict":"keep","reason":"技力是觸發條件,回復的是生命"},
+"tw sup.sprecovery 未開啟技能且技力小於或等於最大值": {"verdict":"keep","reason":"同上一筆,台服文字"},
+"cn sup.sprecovery 获得#（+#）技力": {"verdict":"keep","reason":"ASH 部署後自己獲得技力;只回自身,新定義下本來就不算"},
+"tw sup.sprecovery 獲得#（+#）技力": {"verdict":"keep","reason":"同上一筆,台服文字"},
+"cn sup.sprecovery 赛思立刻获得#技力；且部署当前复制": {"verdict":"drop","reason":"新比對字串「使其立刻获得」標到了這段,已不再報出;第二段跑 accept-suspects 時自然移出清單"},
+"cn sup.sprecovery 使其立刻获得#技力": {"verdict":"drop","reason":"新比對字串直接標到,已不再報出;規格指定拿掉"},
+"cn sup.sprecovery 置为高台装置回复技力和生命的效果翻倍": {"verdict":"keep","reason":"拿技力的是高台裝置(娜斯提自己的召喚物)"},
+"tw sup.sprecovery 置為高台裝置回復技力和生命的效果翻倍": {"verdict":"keep","reason":"同上一筆,台服文字"},
+"cn sup.sprecovery 人时无法自我回复技力，阻挡敌人时恢复": {"verdict":"keep","reason":"森蚺模組特性講自己的技力回復條件"},
+"cn sup.sprecovery ，阻挡敌人时恢复技力回复速度且攻击力": {"verdict":"keep","reason":"森蚺模組特性講自己的技力回復條件"},
+"cn sup.sprecovery 敌人时才能够回复技力⏎在生息演算中，": {"verdict":"keep","reason":"森蚺模組特性講自己的技力回復條件"},
+"cn sup.sprecovery 物效果时可以回复技力，且开启技能时会": {"verdict":"keep","reason":"生息演算中有食物效果時森蚺自己能回技力"}
+}

@@ -1,18 +1,15 @@
 // 維護者在本機執行:抓陸服與台服原始資料 → 建置索引 → 寫進 public/data/index.json 與 public/data/operators/。
 //   npm run build-index            重新下載原始資料
 //   npm run build-index:offline    沿用 .cache/raw 裡已下載的資料
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { prepareAvatars, prepareSkillIcons } from './images'
-import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, type PowerList, skillIconId, skillIconPath, type SupplementKeyword, type TermMatch } from './buildIndex'
-import type { AuditSeeds } from './audit'
-import type { RawServer } from './raw'
+import { attachOperatorFiles, buildIndex, skillIconId, skillIconPath } from './buildIndex'
+import { CACHE, DOWNLOADED_AT, loadBuildInput, readJson } from './input'
 import { diffKnown, KNOWN_LISTS, type KnownList } from './known'
 import { REVIEW_DIR, ROOT } from './paths'
 import { DATA_SOURCES, rawBase } from '../src/core/sources'
 
-const CACHE = join(ROOT, '.cache', 'raw')
 const OUT_INDEX = join(ROOT, 'public', 'data', 'index.json')
 const OUT_OPERATORS = join(ROOT, 'public', 'data', 'operators')
 
@@ -38,9 +35,6 @@ const SOURCES = {
 
 type ServerKey = keyof typeof SOURCES
 
-/** 快取裡記錄某個伺服器資料下載時間的檔案。 */
-const DOWNLOADED_AT = 'downloaded_at.txt'
-
 async function download(server: ServerKey, file: string): Promise<void> {
   const url = `${SOURCES[server].base}/${file}.json`
   const res = await fetch(url)
@@ -57,49 +51,13 @@ async function downloadServer(server: ServerKey): Promise<void> {
   await writeFile(join(CACHE, server, DOWNLOADED_AT), new Date().toISOString())
 }
 
-/** 快取裡的下載時間;還沒有記錄的舊快取,以幹員表檔案的修改時間代替。 */
-async function downloadedAt(server: ServerKey): Promise<string> {
-  const record = join(CACHE, server, DOWNLOADED_AT)
-  if (existsSync(record)) return (await readFile(record, 'utf8')).trim()
-  return (await stat(join(CACHE, server, 'character_table.json'))).mtime.toISOString()
-}
-
-async function readJson<T>(path: string): Promise<T> {
-  return JSON.parse(await readFile(path, 'utf8')) as T
-}
-
-async function loadServer(server: ServerKey): Promise<RawServer> {
-  const f = (name: string) => join(CACHE, server, `${name}.json`)
-  const optional = async <T>(name: string): Promise<T | undefined> => (existsSync(f(name)) ? readJson<T>(f(name)) : undefined)
-  return {
-    characterTable: await readJson(f('character_table')),
-    skillTable: await readJson(f('skill_table')),
-    gamedataConst: await readJson(f('gamedata_const')),
-    uniequipTable: await optional('uniequip_table'),
-    battleEquipTable: await optional('battle_equip_table'),
-    charPatchTable: await optional('char_patch_table'),
-    itemTable: await optional('item_table'),
-    handbookTeamTable: await optional('handbook_team_table'),
-    downloadedAt: await downloadedAt(server),
-  }
-}
-
 async function main() {
   const offline = process.argv.includes('--offline')
   if (!offline) await Promise.all((Object.keys(SOURCES) as ServerKey[]).map(downloadServer))
 
-  const cn = await loadServer('cn')
-  const tw = await loadServer('tw')
-  const groups = await readJson<KeywordGroup[]>(join(ROOT, 'data', 'keyword-groups.json'))
-  const overrides = await readJson<Overrides>(join(ROOT, 'data', 'effect-overrides.json'))
-  const supplements = await readJson<SupplementKeyword[]>(join(ROOT, 'data', 'supplementary-keywords.json'))
-  const termMatches = await readJson<TermMatch[]>(join(ROOT, 'data', 'term-matches.json'))
-  const excludedTerms = await readJson<string[]>(join(ROOT, 'data', 'excluded-terms.json'))
-  const prtsPages = await readJson<Record<string, string>>(join(ROOT, 'data', 'prts-pages.json'))
-  const twPowerNames = await readJson<Record<string, string>>(join(ROOT, 'data', 'tw-power-names.json'))
-  const powerList = await readJson<PowerList>(join(ROOT, 'data', 'power-list.json'))
-  const auditSeeds = await readJson<AuditSeeds>(join(ROOT, 'data', 'audit-seeds.json'))
-  const { index, operatorFiles, warnings, pending, suspects } = buildIndex({ cn, tw, groups, supplements, termMatches, overrides, excludedTerms, prtsPages, twPowerNames, powerList, auditSeeds })
+  const input = await loadBuildInput()
+  const { cn } = input
+  const { index, operatorFiles, warnings, pending, suspects } = buildIndex(input)
 
   // 頭像:職業形態(阿米婭)沒有專屬頭像時改用預設形態
   const formDefault = new Map<string, string>()

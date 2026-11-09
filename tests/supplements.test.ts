@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type BuildInput, type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
-import { keywordGroups, query } from '../src/core/query'
+import { keywordGroups, operatorDetail, query } from '../src/core/query'
+import type { EffectType } from '../src/core/types'
 import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
 
@@ -61,12 +62,13 @@ describe('補充關鍵字', () => {
     ])
   })
 
-  describe('技力回復(維護者清單的比對字串)', () => {
+  describe('友方技力回復(維護者清單的比對字串)', () => {
     const cases: [name: string, cn: string, tw: string][] = [
-      ['瞬間回復', '攻击敌人时额外回复2点技力', '攻擊敵人時額外回復2點技力'],
-      ['擊殺回復', '造成致命伤害时使敌人保留1点生命并使其重伤（击杀者技力+2）', '造成致命傷害時使敵人保留1點生命並使其重傷（擊殺者技力+2）'],
-      ['回復速度', '攻击范围内存在敌人时技力自然恢复速度+0.2/秒', '攻擊範圍內存在敵人時技力自然恢復速度+0.2/秒'],
+      ['瞬間回復', '治疗友方单位时，使目标额外回复2点技力', '治療友方單位時，使目標額外回復2點技力'],
+      ['擊殺回復', '击杀敌人后，攻击范围内所有友方干员技力+2', '擊殺敵人後，攻擊範圍內所有友方幹員技力+2'],
+      ['回復速度', '攻击范围内的友方干员技力回复速度+0.3/秒', '攻擊範圍內的友方幹員技力回復速度+0.3/秒'],
       ['初始技力', '编入队伍时所有【叙拉古】干员的初始技力+5', '編入隊伍時所有【敘拉古】幹員的初始技力+5'],
+      ['立刻獲得', '部署当前复制的干员时使其立刻获得10技力', '部署當前複製的幹員時使其立刻獲得10技力'],
       ['只提技力', '技力满时可使用装备应变来开启技能', '技力滿時可使用裝備應變來開啟技能'],
     ]
     function servers() {
@@ -79,14 +81,68 @@ describe('補充關鍵字', () => {
       }
     }
 
-    test.each(['cn', 'tw'] as const)('%s:瞬間回復、回復速度提升、初始技力提高命中,只提到技力的不命中', (srv) => {
+    test.each(['cn', 'tw'] as const)('%s:給其他友方幹員的瞬間回復、擊殺回復、回復速度、初始技力、立刻獲得命中,只提到技力的不命中', (srv) => {
       const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
       const results = query(index, { conditions: applying('sup.sprecovery'), server: srv })
-      expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復'].sort())
+      expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復', '立刻獲得'].sort())
       const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
-      expect(keyword.name).toBe('技力回復')
+      expect(keyword.name).toBe('友方技力回復')
       expect(keyword.unofficial).toBe(true)
-      expect(plain(keyword.definition)).toBe('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+      expect(plain(keyword.definition)).toBe('使其他友方幹員立即獲得技力、提高初始技力,或提升技力的回復速度。')
+    })
+  })
+
+  describe('效果類型為空的補充關鍵字配對不標記', () => {
+    function buildReviewed(input: BuildInput, decide: (text: string, keyword: string) => EffectType[]) {
+      const first = buildIndex(input)
+      const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: decide(p.text, p.keyword), reviewed: true }]))
+      return buildIndex({ ...input, overrides })
+    }
+
+    test('覆寫為空類型的敘述裡,這個關鍵字不標記也不列入;另一段覆寫為施加的照樣標記並列入', () => {
+      const cn = fixture({ 空類型: '使敌人<$ba.cold>寒冷</>并将其推开', 施加: '攻击将敌人推开' })
+      const { index } = buildReviewed({ cn, supplements }, (text, keyword) =>
+        keyword === 'sup.knockback' && text.includes('寒冷') ? [] : ['apply'],
+      )
+      const results = query(index, { conditions: applying('ba.cold', 'sup.knockback'), server: 'cn' })
+      expect(results.map((r) => [r.name, highlights(r.entries[0].stages[0].runs)])).toEqual([
+        ['空類型', [['寒冷', 'ba.cold']]],
+        ['施加', [['推开', 'sup.knockback']]],
+      ])
+      expect(query(index, { conditions: applying('sup.knockback'), server: 'cn' }).map((r) => r.name)).toEqual(['施加'])
+    })
+
+    test('術語的空類型配對照舊標記', () => {
+      const cn = fixture({ 甲: '使敌人<$ba.cold>寒冷</>并将其推开' })
+      const { index } = buildReviewed({ cn, supplements }, (_, keyword) => (keyword === 'ba.cold' ? [] : ['apply']))
+      const [r] = query(index, { conditions: applying('sup.knockback'), server: 'cn' })
+      expect(highlights(r.entries[0].stages[0].runs)).toEqual([
+        ['寒冷', 'ba.cold'],
+        ['推开', 'sup.knockback'],
+      ])
+    })
+
+    test('規則判定為空、還沒複核的補充關鍵字配對同樣不標記,仍列入待複核', () => {
+      const cn = fixture({ 甲: '使敌人<$ba.cold>寒冷</>，敌人被推开时攻击力下降' })
+      const { index, pending } = buildIndex({ cn, supplements })
+      expect(pending.map((p) => [p.keyword, p.ruleTypes])).toEqual([
+        ['ba.cold', ['apply']],
+        ['sup.knockback', []],
+      ])
+      const [r] = query(index, { conditions: applying('ba.cold'), server: 'cn' })
+      expect(highlights(r.entries[0].stages[0].runs)).toEqual([['寒冷', 'ba.cold']])
+    })
+
+    test('台服文字與陸服一致、陸服覆寫為空類型時,兩服文字都不標記,仍判為兩服一致,台服配對不進待複核', () => {
+      const raw = (description: string, style: 'array' | 'object') =>
+        server({ terms: COMMON_TERMS, operators: { char_500_s: operator({ name: '甲', skills: ['sk_0'], style }) }, skills: [basicSkill('sk_0', '技', { description }, style)] })
+      const input: BuildInput = { cn: raw('将敌人推开', 'array'), tw: raw('將敵人推開', 'object'), supplements }
+      const { pending, operatorFiles } = buildReviewed(input, () => [])
+      expect(pending).toEqual([])
+      const detail = (srv: 'cn' | 'tw') => operatorDetail(operatorFiles[0], { server: srv, conditions: [], branchName: '' }).tabs[0].entries[0].stages[0].runs
+      expect(plain(detail('cn'))).toBe('將敵人推開')
+      expect(highlights(detail('cn'))).toEqual([])
+      expect(highlights(detail('tw'))).toEqual([])
     })
   })
 

@@ -388,21 +388,23 @@ test('關鍵字面板依分組分行:控場第一行以減速開頭,沉默與失
   expect(await top(1)).toBeGreaterThan(await top(0))
 })
 
-test('技力回復:在增益分組緊接鼓舞之後;點了之後列出回技力的幹員,懸停看得到非官方定義', async ({ page }) => {
+test('友方技力回復:在增益分組緊接鼓舞之後;點了之後只列出給其他友方幹員回技力的幹員,懸停看得到非官方定義', async ({ page }) => {
   await page.goto('./')
   const panel = page.getByRole('complementary', { name: '關鍵字面板' })
   const buff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '增益', exact: true }) })
+  await expect(buff.getByRole('button', { name: '鼓舞', exact: true })).toBeVisible()
   const names = (await buff.locator('.kw-list').nth(2).locator('.kw').allTextContents()).map((t) => t.trim())
-  expect(names[names.indexOf('鼓舞') + 1]).toBe('技力回復')
+  expect(names[names.indexOf('鼓舞') + 1]).toBe('友方技力回復')
 
-  await buff.getByRole('button', { name: '技力回復', exact: true }).click()
+  await buff.getByRole('button', { name: '友方技力回復', exact: true }).click()
   const cards = page.getByTestId('result-card')
-  for (const name of ['謎圖', '格勞克斯', '荒蕪拉普蘭德'])
-    await expect(cards.filter({ has: page.getByRole('heading', { name, exact: true }) })).toHaveCount(1)
+  const card = (name: string) => cards.filter({ has: page.getByRole('heading', { name, exact: true }) })
+  for (const name of ['白面鴞', '華法琳', '荒蕪拉普蘭德']) await expect(card(name)).toHaveCount(1)
+  for (const name of ['謎圖', '格勞克斯', '伊芙利特', '溫蒂']) await expect(card(name)).toHaveCount(0)
 
   await cards.first().locator('mark.hl').first().hover()
   const tip = page.getByTestId('tip')
-  await expect(tip).toContainText('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+  await expect(tip).toContainText('使其他友方幹員立即獲得技力、提高初始技力,或提升技力的回復速度。')
   await expect(tip).toContainText('非官方')
 })
 
