@@ -1,51 +1,13 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildIndex, type BuildInput, type Overrides, type SupplementKeyword } from '../../../build/buildIndex'
-import type { RawServer } from '../../../build/raw'
+import { buildIndex } from '../../../build/buildIndex'
+import { loadBuildInput, readData, readJson } from '../../../build/input'
 
-const ROOT = process.cwd()
-const HERE = join(ROOT, '.scratch', 'sp-recovery-allies', 'review-data')
+const HERE = import.meta.dirname
 const KEYWORD = 'sup.sprecovery'
-const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T
-const data = <T>(name: string): T => json<T>(join(ROOT, 'data', `${name}.json`))
 
-function loadServer(server: 'cn' | 'tw'): RawServer {
-  const f = (name: string) => join(ROOT, '.cache', 'raw', server, `${name}.json`)
-  const optional = (name: string) => {
-    try {
-      return json(f(name))
-    } catch {
-      return undefined
-    }
-  }
-  return {
-    characterTable: json(f('character_table')),
-    skillTable: json(f('skill_table')),
-    gamedataConst: json(f('gamedata_const')),
-    uniequipTable: optional('uniequip_table'),
-    battleEquipTable: optional('battle_equip_table'),
-    charPatchTable: optional('char_patch_table'),
-    itemTable: optional('item_table'),
-    handbookTeamTable: optional('handbook_team_table'),
-    downloadedAt: '',
-  } as RawServer
-}
-
-const overrides = data<Overrides>('effect-overrides')
-const supplements = data<SupplementKeyword[]>('supplementary-keywords')
-const input: BuildInput = {
-  cn: loadServer('cn'),
-  tw: loadServer('tw'),
-  groups: data('keyword-groups'),
-  supplements,
-  termMatches: data('term-matches'),
-  overrides,
-  excludedTerms: data('excluded-terms'),
-  prtsPages: data('prts-pages'),
-  twPowerNames: data('tw-power-names'),
-  powerList: data('power-list'),
-  auditSeeds: data('audit-seeds'),
-}
+const input = await loadBuildInput()
+const { overrides, supplements } = input
 
 const stripped = Object.fromEntries(Object.entries(overrides).filter(([k]) => !k.endsWith(`:${KEYWORD}`)))
 const strippedBuild = buildIndex({ ...input, overrides: stripped })
@@ -76,7 +38,7 @@ interface Judgement {
   unsure?: boolean
   reason: string
 }
-const judgements = json<Record<string, Judgement>>(join(HERE, 'judgements.json'))
+const judgements = await readJson<Record<string, Judgement>>(join(HERE, 'judgements.json'))
 const verdictLabel = (j: Judgement) => `${j.verdict === 'apply' ? '施加' : '空類型'}${j.unsure ? '(拿不準)' : ''}`
 
 const missing = pairs.filter((p) => !judgements[p.key]).map((p) => p.key)
@@ -128,10 +90,10 @@ writeFileSync(
   ) + '\n',
 )
 
-const known = data<string[]>('known-suspects').filter((k) => k.split(' ')[1] === KEYWORD)
+const known = (await readData<string[]>('known-suspects')).filter((k) => k.split(' ')[1] === KEYWORD)
 const fullBuild = buildIndex(input)
 const suspects = new Map(fullBuild.suspects.map((s) => [s.key, s]))
-const suspectJudgements = json<Record<string, { verdict: 'keep' | 'drop' | 'gap'; reason: string }>>(join(HERE, 'suspect-judgements.json'))
+const suspectJudgements = await readJson<Record<string, { verdict: 'keep' | 'drop' | 'gap'; reason: string }>>(join(HERE, 'suspect-judgements.json'))
 const SUSPECT_VERDICT = { keep: '留著', drop: '拿掉', gap: '漏標,補比對字串' }
 const suspectRows = known.map((key) => {
   const s = suspects.get(key)

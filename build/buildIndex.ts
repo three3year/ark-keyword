@@ -32,7 +32,7 @@ import type {
   Trigger,
 } from '../src/core/types'
 import { EFFECT_TYPE_LABELS, PROFESSION_LABELS, PROFESSIONS, sortTypes } from '../src/core/types'
-import { type AuditSeeds, auditSuspects, auditTargets, type Suspect, whereOf, withoutOwnSide } from './audit'
+import { type AuditSeeds, auditSuspects, auditTargets, type Suspect, whereOf } from './audit'
 import { ruleEffectTypes } from './effectType'
 import { withPotentialBonus } from './potential'
 import type {
@@ -46,9 +46,10 @@ import type {
   RawSkill,
   RawSkillLevel,
   RawTalentCandidate,
+  RawTerm,
   RawUnlockCondition,
 } from './raw'
-import { isKeywordTerm, parseRichText, plainText, push, toValues } from './richText'
+import { isKeywordTerm, isSupplementKeyword, mapRuns, markIds, parseRichText, plainText, toValues, withoutOwnSide } from './richText'
 import { markTextMatches, type TextMatcher } from './textMatch'
 
 function dataVersion(raw: RawServer): DataVersion {
@@ -563,64 +564,67 @@ class Builder {
   parse(raw: string, values: Map<string, number | string>, where: string): Run[] {
     const runs = parseRichText(raw, { values, where, warn: this.warn })
     if (!runs.some((r) => r.k && this.excluded.has(r.k))) return runs
-    const out: Run[] = []
-    for (const r of runs) push(out, r.k && this.excluded.has(r.k) ? { ...r, k: undefined } : r)
-    return out
+    return mapRuns(runs, (r) => (r.k && this.excluded.has(r.k) ? { ...r, k: undefined } : r))
   }
 
   stage(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, head: Pick<IndexStage, 'kind' | 'module'>, produce: Producer): IndexStage | undefined {
     const cnRuns = produce('cn')
     if (!cnRuns) return undefined
     const where = whereOf(owner, entry, head)
-    const cn = this.finish(cnRuns, 'cn', where)
-    const stage: IndexStage = { ...head, cn: withoutEmptySupplements(cn) }
+    const cnPaired = this.finish(cnRuns, 'cn', where)
+    const stage: IndexStage = { ...head, cn: withoutEmptySupplements(cnPaired) }
     const twOfficial = this.input.tw ? produce('tw') : undefined
     if (twOfficial) {
-      const { runs: twRuns, ambiguous } = this.tagFromCn(cnRuns, twOfficial, where)
+      const { runs: twRuns, expected } = this.tagFromCn(cnRuns, twOfficial, where)
       const marked = markTextMatches(twRuns, this.matchers.tw)
-      if (signature(marked) === signature(cn.runs)) {
+      if (signature(marked) === signature(cnPaired.runs)) {
         // 與陸服一致:沿用陸服的效果類型,陸服模式可改顯示繁中
-        stage.tw = withoutEmptySupplements({ runs: marked, hits: structuredClone(cn.hits) })
+        stage.tw = withoutEmptySupplements({ runs: marked, hits: structuredClone(cnPaired.hits) })
         stage.twSame = true
-        this.warnTwOverrideMismatch(marked, cn.hits, where)
+        this.warnTwOverrideMismatch(marked, cnPaired.hits, where)
       } else {
         stage.tw = withoutEmptySupplements(this.finish(twRuns, 'tw', `${where}(台服)`))
       }
-      this.warnMissingFromCn(cnRuns, stage.tw.runs, ambiguous, where)
+      this.warnMissingFromCn(expected, stage.tw.runs, where)
     }
     return stage
   }
 
-  tagFromCn(cnOfficial: Run[], twOfficial: Run[], where: string): { runs: Run[]; ambiguous: Set<string> } {
-    const twCounts = markCounts(twOfficial)
-    const twTerms = this.input.tw?.gamedataConst.termDescriptionDict ?? {}
+  /**
+   * 照陸服補標台服文字。expected:台服最終應有的各 id 標記數(陸服官方標記數),
+   * 不含台服名稱對到多個 id、不照陸服補標的 id。
+   */
+  tagFromCn(cnOfficial: Run[], twOfficial: Run[], where: string): { runs: Run[]; expected: Map<string, number> } {
+    const expected = markCounts(cnOfficial)
     const idsByName = new Map<string, string[]>()
-    for (const [id, count] of markCounts(cnOfficial)) {
-      if (count <= (twCounts.get(id) ?? 0) || !twTerms[id]) continue
-      const name = withoutOwnSide(twTerms[id].termName)
+    for (const id of surplusIds(expected, twOfficial)) {
+      const term = this.twTerms[id]
+      if (!term) continue
+      const name = withoutOwnSide(term.termName)
       idsByName.set(name, [...(idsByName.get(name) ?? []), id])
     }
     const matchers: TextMatcher[] = []
-    const ambiguous = new Set<string>()
     for (const [name, ids] of idsByName) {
       if (ids.length === 1) {
         matchers.push({ id: ids[0], strings: [name] })
         continue
       }
       this.warnOnce(`幹員 ${where}:台服名稱「${name}」對到陸服的 ${ids.sort().join(' 與 ')},不照陸服補標`)
-      for (const id of ids) ambiguous.add(id)
+      for (const id of ids) expected.delete(id)
     }
-    return { runs: markTextMatches(twOfficial, matchers), ambiguous }
+    return { runs: markTextMatches(twOfficial, matchers), expected }
   }
 
-  warnMissingFromCn(cnOfficial: Run[], twFinal: Run[], ambiguous: Set<string>, where: string) {
-    const twCounts = markCounts(twFinal)
-    const twTerms = this.input.tw?.gamedataConst.termDescriptionDict ?? {}
-    for (const [id, count] of markCounts(cnOfficial)) {
-      if (count <= (twCounts.get(id) ?? 0) || ambiguous.has(id)) continue
-      const reason = twTerms[id] ? `台服文字找不到它的台服名稱「${withoutOwnSide(twTerms[id].termName)}」` : '台服資料沒有這個術語'
+  warnMissingFromCn(expected: Map<string, number>, twFinal: Run[], where: string) {
+    for (const id of surplusIds(expected, twFinal)) {
+      const term = this.twTerms[id]
+      const reason = term ? `台服文字找不到它的台服名稱「${withoutOwnSide(term.termName)}」` : '台服資料沒有這個術語'
       this.warnOnce(`幹員 ${where}:陸服標了 ${id},${reason}`)
     }
+  }
+
+  get twTerms(): Record<string, RawTerm> {
+    return this.input.tw?.gamedataConst.termDescriptionDict ?? {}
   }
 
   warnTwOverrideMismatch(twRuns: Run[], cnHits: IndexText['hits'], where: string) {
@@ -685,9 +689,9 @@ class Builder {
       for (const e of op.entries)
         for (const st of e.stages) for (const k of [...Object.keys(st.cn.hits), ...Object.keys(st.tw?.hits ?? {})]) used.add(k)
     const cnTerms = this.input.cn.gamedataConst.termDescriptionDict
-    const twTerms = this.input.tw?.gamedataConst.termDescriptionDict ?? {}
+    const twTerms = this.twTerms
     const keywords: IndexKeyword[] = []
-    for (const id of [...used].filter((id) => !id.startsWith('sup.')).sort((a, b) => a.localeCompare(b))) {
+    for (const id of [...used].filter((id) => !isSupplementKeyword(id)).sort((a, b) => a.localeCompare(b))) {
       // 名稱與定義優先用台服
       const term = twTerms[id] ?? cnTerms[id]
       if (!term) this.warn(`術語字典沒有 ${id}`)
@@ -718,18 +722,20 @@ function isOperator(id: string, char: RawCharacter): boolean {
 }
 
 function withoutEmptySupplements(text: IndexText): IndexText {
-  const empty = (k: string | undefined) => !!k?.startsWith('sup.') && text.hits[k]?.length === 0
+  const empty = (k: string | undefined) => !!k && isSupplementKeyword(k) && text.hits[k]?.length === 0
   if (!text.runs.some((r) => empty(r.k))) return text
-  const runs: Run[] = []
-  for (const r of text.runs) push(runs, empty(r.k) ? { ...r, k: undefined } : r)
-  return { ...text, runs }
+  return { ...text, runs: mapRuns(text.runs, (r) => (empty(r.k) ? { ...r, k: undefined } : r)) }
+}
+
+/** 陸服標記數(cnCounts)多於台服 runs 的 id。 */
+function surplusIds(cnCounts: Map<string, number>, tw: Run[]): string[] {
+  const twCounts = markCounts(tw)
+  return [...cnCounts].filter(([id, count]) => count > (twCounts.get(id) ?? 0)).map(([id]) => id)
 }
 
 function markCounts(runs: Run[]): Map<string, number> {
   const counts = new Map<string, number>()
-  runs.forEach((r, i) => {
-    if (r.k && r.k !== runs[i - 1]?.k) counts.set(r.k, (counts.get(r.k) ?? 0) + 1)
-  })
+  for (const id of markIds(runs)) counts.set(id, (counts.get(id) ?? 0) + 1)
   return counts
 }
 
@@ -865,8 +871,8 @@ const BRACKETED = /【([^】]+)】/g
 
 /** 比較陸服與台服文字是否「一致」:術語順序、數值、補充關鍵字都相同。 */
 function signature(runs: Run[]): string {
-  const terms = runs.filter((r) => r.k && !r.k.startsWith('sup.')).map((r) => r.k)
-  const sups = [...new Set(runs.filter((r) => r.k?.startsWith('sup.')).map((r) => r.k))].sort()
+  const terms = runs.filter((r) => r.k && !isSupplementKeyword(r.k)).map((r) => r.k)
+  const sups = [...new Set(runs.filter((r) => r.k && isSupplementKeyword(r.k)).map((r) => r.k))].sort()
   const numbers = plainText(runs).match(NUMBER) ?? []
   return JSON.stringify([terms, numbers, sups])
 }

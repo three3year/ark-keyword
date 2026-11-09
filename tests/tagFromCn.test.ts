@@ -76,6 +76,26 @@ describe('照陸服補標台服術語', () => {
     expect(warnings).toEqual([warning])
   })
 
+  test('陸服兩個相鄰的同 id 標記算兩個:台服只標了一個時,補標另一個', () => {
+    const { index, warnings } = build({ 甲: '使敌人<$ba.stun>晕眩</><$ba.stun>晕眩</>' }, { 甲: '使敵人<$ba.stun>暈眩</>，暈眩' })
+    expect(warnings).toEqual([])
+    const [r] = query(index, { conditions: applying('ba.stun'), server: 'tw' })
+    expect(highlights(r.entries[0].stages[0].runs)).toEqual([
+      ['暈眩', 'ba.stun'],
+      ['暈眩', 'ba.stun'],
+    ])
+  })
+
+  test('台服補標出兩個相鄰的同名標記,算兩個:陸服標了兩個時不發找不到名稱的警告', () => {
+    const { index, warnings } = build({ 甲: '使敌人<$ba.stun>晕眩</>，再<$ba.stun>晕眩</>' }, { 甲: '使敵人暈眩暈眩' })
+    expect(warnings).toEqual([])
+    const [r] = query(index, { conditions: applying('ba.stun'), server: 'tw' })
+    expect(highlights(r.entries[0].stages[0].runs)).toEqual([
+      ['暈眩', 'ba.stun'],
+      ['暈眩', 'ba.stun'],
+    ])
+  })
+
   test('兩種警告都能收進已知警告清單', () => {
     const descriptions = {
       cn: { 甲: '我方<$ba.dt.apoptosis2>凋亡损伤</>时使敌人受到<$ba.dt.apoptosis>凋亡损伤</>', 乙: '攻击使敌人<$ba.stun>晕眩</>2秒' },

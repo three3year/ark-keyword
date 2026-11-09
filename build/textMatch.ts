@@ -1,7 +1,7 @@
 // 以維護者清單比對純文字標出關鍵字:補充關鍵字(推、拉、沉默、減速…),以及術語比對清單補上的遊戲漏標術語。
 // 比對在整段純文字上進行,所以可以跨越樣式標記;已在術語標記內的文字不比對,避免重複計算。
 import type { Run } from '../src/core/types'
-import { push } from './richText'
+import { push, startsMark } from './richText'
 
 export interface TextMatcher {
   /** 關鍵字 id:補充關鍵字為 sup.xxx,術語比對清單為術語 id。 */
@@ -15,7 +15,14 @@ export function markTextMatches(runs: Run[], matchers: TextMatcher[]): Run[] {
   const text = runs.map((r) => r.t).join('')
   // 每個字元目前的關鍵字:術語的字元一開始就佔用
   const owner: (string | undefined)[] = []
-  for (const r of runs) for (let i = 0; i < r.t.length; i++) owner.push(r.k)
+  // 每個字元是否為一個標記的開頭:保留既有標記的邊界,每個新命中各自成一個標記
+  const markStart: boolean[] = []
+  runs.forEach((r, i) => {
+    for (let j = 0; j < r.t.length; j++) {
+      owner.push(r.k)
+      markStart.push(j === 0 && startsMark(runs, i))
+    }
+  })
 
   const patterns = matchers
     .flatMap((m) => m.strings.filter(Boolean).map((s) => ({ id: m.id, s })))
@@ -25,6 +32,7 @@ export function markTextMatches(runs: Run[], matchers: TextMatcher[]): Run[] {
     for (let from = text.indexOf(s); from !== -1; from = text.indexOf(s, from + 1)) {
       if (owner.slice(from, from + s.length).some(Boolean)) continue
       for (let i = from; i < from + s.length; i++) owner[i] = id
+      markStart[from] = true
       changed = true
     }
   }
@@ -37,7 +45,7 @@ export function markTextMatches(runs: Run[], matchers: TextMatcher[]): Run[] {
       const k = owner[offset + i]
       // 新標上的關鍵字不保留樣式,跨越樣式標記的命中才會合成一段高亮
       const fresh = k && k !== r.k
-      push(out, { ...r, t: r.t[i], k, s: fresh ? undefined : r.s })
+      push(out, { ...r, t: r.t[i], k, s: fresh ? undefined : r.s }, markStart[offset + i])
     }
     offset += r.t.length
   }
