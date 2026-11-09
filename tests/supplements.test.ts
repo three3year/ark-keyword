@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
+import { type BuildInput, type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
 import { keywordGroups, query } from '../src/core/query'
 import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
@@ -9,6 +9,13 @@ const supplements: SupplementKeyword[] = [
   { id: 'truedmg', name: '真實傷害', cn: ['真实伤害'], tw: ['真實傷害'], definition: '無視防禦與法術抗性的傷害' },
   { id: 'lift', name: '浮起', cn: ['浮空'], tw: ['浮空'], definition: '測試用' },
 ]
+
+/** 建一次索引,把待複核的配對全判為施加,再帶著這份覆寫重建。 */
+function buildWithPendingReviewedAsApply(input: BuildInput) {
+  const first = buildIndex(input)
+  const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
+  return buildIndex({ ...input, overrides })
+}
 
 function fixture(descriptions: Record<string, string>) {
   const operators = Object.fromEntries(Object.keys(descriptions).map((name, i) => [`char_${500 + i}_s`, operator({ name, skills: [`sk_${i}`] })]))
@@ -73,15 +80,13 @@ describe('補充關鍵字', () => {
     }
 
     test.each(['cn', 'tw'] as const)('%s:瞬間回復、回復速度提升、初始技力提高命中,只提到技力的不命中', (srv) => {
-      const first = buildIndex({ ...servers(), supplements: realSupplements })
-      const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
-      const { index } = buildIndex({ ...servers(), supplements: realSupplements, overrides })
+      const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
       const results = query(index, { conditions: applying('sup.sprecovery'), server: srv })
       expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復'].sort())
-      const sp = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
-      expect(sp.name).toBe('技力回復')
-      expect(sp.unofficial).toBe(true)
-      expect(plain(sp.definition)).toBe('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
+      const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
+      expect(keyword.name).toBe('技力回復')
+      expect(keyword.unofficial).toBe(true)
+      expect(plain(keyword.definition)).toBe('使自身或友方立即獲得技力、提高初始技力,或提升技力的回復速度。')
     })
   })
 

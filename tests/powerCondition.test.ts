@@ -23,11 +23,11 @@ interface Member {
   profession?: string
   power?: RawPower
   hiddenPowers?: RawPower[]
-  cold?: boolean
+  appliesCold?: boolean
   talent?: string
 }
 
-function fixture(members: Member[], twMembers: Member[] = []): BuildInput {
+function fixture(oldestFirst: Member[], twMembers: Member[] = []): BuildInput {
   const op = (m: Member, style: 'array' | 'object') =>
     operator({
       name: m.name,
@@ -36,14 +36,14 @@ function fixture(members: Member[], twMembers: Member[] = []): BuildInput {
       style,
       power: m.power,
       hiddenPowers: m.hiddenPowers,
-      skills: m.cold ? ['sk_cold'] : [],
+      skills: m.appliesCold ? ['sk_cold'] : [],
       talents: m.talent ? [{ name: '天賦', description: m.talent }] : [],
     })
   const skills = [basicSkill('sk_cold', '冷', { description: '使敌人<$ba.cold>寒冷</>' })]
-  const cn = server({ terms: COMMON_TERMS, powerNames: CN_NAMES, skills, operators: Object.fromEntries(members.map((m) => [m.id, op(m, 'array')])) })
+  const cn = server({ terms: COMMON_TERMS, powerNames: CN_NAMES, skills, operators: Object.fromEntries(oldestFirst.map((m) => [m.id, op(m, 'array')])) })
   const tw = server({ terms: COMMON_TERMS, skills, operators: Object.fromEntries(twMembers.map((m) => [m.id, op(m, 'object')])) })
   return {
-    cn: withRelease(cn, members.map((m) => m.id)),
+    cn: withRelease(cn, oldestFirst.map((m) => m.id)),
     tw,
     twPowerNames: TW_NAMES,
     powerList: [['kazimierz', 'siracusa', 'kjerag', 'rhodes'], ['abyssal', { id: 'sui', cn: '岁', tw: '歲' }], ['sees']],
@@ -56,9 +56,9 @@ const names = (raw: BuildInput, opts: Partial<Parameters<typeof query>[1]>) =>
 describe('勢力條件', () => {
   test('只有勢力條件:列出該勢力全部幹員(含沒有任何關鍵字的),命中敘述為空', () => {
     const raw = fixture([
-      { id: 'char_801_a', name: '卡西米爾寒冷', power: { nationId: 'kazimierz' }, cold: true },
+      { id: 'char_801_a', name: '卡西米爾寒冷', power: { nationId: 'kazimierz' }, appliesCold: true },
       { id: 'char_802_b', name: '卡西米爾無關鍵字', power: { nationId: 'kazimierz' } },
-      { id: 'char_803_c', name: '敘拉古', power: { nationId: 'siracusa' }, cold: true },
+      { id: 'char_803_c', name: '敘拉古', power: { nationId: 'siracusa' }, appliesCold: true },
     ])
     const results = query(buildIndex(raw).index, { conditions: [], server: 'cn', powers: ['kazimierz'] })
     expect(results.map((r) => r.name)).toEqual(['卡西米爾無關鍵字', '卡西米爾寒冷'])
@@ -77,10 +77,10 @@ describe('勢力條件', () => {
 
   test('兩個勢力條件 OR;與職業條件、搜尋條件都是 AND', () => {
     const raw = fixture([
-      { id: 'char_801_a', name: '卡西米爾術師', power: { nationId: 'kazimierz' }, cold: true },
+      { id: 'char_801_a', name: '卡西米爾術師', power: { nationId: 'kazimierz' }, appliesCold: true },
       { id: 'char_802_b', name: '卡西米爾近衛', profession: 'WARRIOR', power: { nationId: 'kazimierz' } },
       { id: 'char_803_c', name: '敘拉古術師', power: { nationId: 'siracusa' } },
-      { id: 'char_804_d', name: '謝拉格術師', power: { nationId: 'kjerag' }, cold: true },
+      { id: 'char_804_d', name: '謝拉格術師', power: { nationId: 'kjerag' }, appliesCold: true },
     ])
     expect(names(raw, { powers: ['kazimierz', 'siracusa'] })).toEqual(['卡西米爾近衛', '敘拉古術師', '卡西米爾術師'])
     expect(names(raw, { powers: ['kazimierz'], professions: ['CASTER'] })).toEqual(['卡西米爾術師'])

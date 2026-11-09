@@ -21,6 +21,7 @@ import type {
   OperatorFile,
   OperatorPowers,
   PerServer,
+  PowerId,
   Profession,
   Run,
   SearchIndex,
@@ -67,18 +68,25 @@ export interface SupplementKeyword {
   definition: string
 }
 
-/** 勢力的維護者清單的一項:勢力 id,可另附各伺服器的顯示名稱;沒附時用該伺服器的勢力名稱。 */
-export type PowerListItem = string | { id: string; cn?: string; tw?: string }
+/** 勢力的維護者清單裡附了顯示名稱的一項;沒附的伺服器用該伺服器的勢力名稱。 */
+export interface PowerListEntry {
+  id: PowerId
+  cn?: string
+  tw?: string
+}
+
+/** 勢力的維護者清單的一項:勢力 id,或附了顯示名稱的勢力。 */
+export type PowerListItem = PowerId | PowerListEntry
 
 /** 勢力的維護者清單:可選的勢力,由行組成(國家、組織、團隊各一行),順序就是面板順序。 */
 export type PowerList = PowerListItem[][]
 
-function powerItem(item: PowerListItem): { id: string; cn?: string; tw?: string } {
+export function powerListEntry(item: PowerListItem): PowerListEntry {
   return typeof item === 'string' ? { id: item } : item
 }
 
-export function listedPowerIds(list: PowerList): string[] {
-  return list.flat().map((item) => powerItem(item).id)
+export function listedPowerIds(list: PowerList): PowerId[] {
+  return list.flat().map((item) => powerListEntry(item).id)
 }
 
 /** 效果類型覆寫檔:以「敘述文字雜湊:關鍵字」為鍵,建置時優先於規則判定。types 為空表示複核後判定沒有效果類型。 */
@@ -112,7 +120,7 @@ export interface BuildInput extends PerServer<RawServer> {
   /** 維護者對照:幹員 id → PRTS 頁名。陸服名與其他幹員重複(例如阿米婭的職業形態)時必填。 */
   prtsPages?: Record<string, string>
   /** 維護者對照:台服勢力 ID → 繁中名稱(台服資料沒有勢力名稱表)。 */
-  twPowerNames?: Record<string, string>
+  twPowerNames?: Record<PowerId, string>
   powerList?: PowerList
 }
 
@@ -146,13 +154,13 @@ class Builder {
   readonly operatorFiles: OperatorFile[] = []
   readonly matchers: Record<Server, SupplementMatcher[]>
   readonly excluded: Set<string>
-  readonly listed: string[]
-  readonly powerIdByName: Map<string, string>
+  readonly listedPowerIds: PowerId[]
+  readonly cnPowerIdByName: Map<string, PowerId>
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
-    this.listed = listedPowerIds(input.powerList ?? [])
-    this.powerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
+    this.listedPowerIds = listedPowerIds(input.powerList ?? [])
+    this.cnPowerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
     const supplements = input.supplements ?? []
     this.matchers = {
       cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
@@ -304,10 +312,10 @@ class Builder {
     return op
   }
 
-  listedPowers(char: RawCharacter, twChar: RawCharacter | undefined): PerServer<string[]> | undefined {
+  listedPowers(char: RawCharacter, twChar: RawCharacter | undefined): PerServer<PowerId[]> | undefined {
     const of = (c: RawCharacter) => {
       const own = new Set([c, ...(c.subPower ?? [])].flatMap(powerIds))
-      return this.listed.filter((id) => own.has(id))
+      return this.listedPowerIds.filter((id) => own.has(id))
     }
     const cn = of(char)
     const tw = twChar ? of(twChar) : cn
@@ -321,8 +329,8 @@ class Builder {
       const source = `${e.summon ? `召喚物 ${e.summon} ` : ''}${e.kind === 'talent' ? '天賦' : '技能'}${e.no}`
       for (const stage of e.stages)
         for (const [, name] of plainText(stage.cn.runs).matchAll(BRACKETED)) {
-          const powerId = this.powerIdByName.get(name)
-          if (powerId && !this.listed.includes(powerId)) this.warnOnce(`幹員 ${id} ${source}:【${name}】是勢力清單外的勢力 ${powerId}`)
+          const powerId = this.cnPowerIdByName.get(name)
+          if (powerId && !this.listedPowerIds.includes(powerId)) this.warnOnce(`幹員 ${id} ${source}:【${name}】是勢力清單外的勢力 ${powerId}`)
         }
     }
   }
@@ -330,7 +338,7 @@ class Builder {
   powerRows(): IndexPower[][] {
     return (this.input.powerList ?? []).map((row) =>
       row.map((item) => {
-        const { id, cn, tw } = powerItem(item)
+        const { id, cn, tw } = powerListEntry(item)
         const name: PerServer<string> = { cn: cn ?? this.powerName('cn', id) }
         if (this.input.tw) name.tw = tw ?? this.powerName('tw', id)
         return { id, name }
@@ -343,7 +351,7 @@ class Builder {
     return { power: names(char), hiddenPowers: (char.subPower ?? []).map(names) }
   }
 
-  powerName(server: Server, id: string): string {
+  powerName(server: Server, id: PowerId): string {
     if (server === 'tw') {
       const name = this.input.twPowerNames?.[id]
       if (name) return name
@@ -666,7 +674,7 @@ function operatorAttributes(char: RawCharacter): OperatorAttributes {
   }
 }
 
-function powerIds(p: RawPower): string[] {
+function powerIds(p: RawPower): PowerId[] {
   return [p.nationId, p.groupId, p.teamId].filter((id): id is string => !!id)
 }
 

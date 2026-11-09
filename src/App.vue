@@ -7,8 +7,10 @@ import {
   EFFECT_TYPES,
   PROFESSION_LABELS,
   PROFESSIONS,
+  powersInListOrder,
   type EffectType,
   type IndexKeyword,
+  type PowerId,
   type Profession,
   type ResultOperator,
   type SearchCondition,
@@ -58,9 +60,9 @@ const rarities = ref<number[]>([])
 const professions = ref<Profession[]>([])
 /** 職業條件依遊戲內職業順序,不依點選先後。 */
 const sortedProfessions = computed(() => PROFESSIONS.filter((p) => professions.value.includes(p)))
-const powers = ref<string[]>([])
+const powers = ref<PowerId[]>([])
 const sortedPowers = computed(() =>
-  (index.value?.powerRows.flat() ?? []).map((p) => p.id).filter((id) => powers.value.includes(id)),
+  (index.value ? powersInListOrder(index.value) : []).map((p) => p.id).filter((id) => powers.value.includes(id)),
 )
 const searching = computed(() => startsSearch({ conditions: conditions.value, professions: professions.value, powers: powers.value }))
 // 窄螢幕上關鍵字面板收合成抽屜
@@ -131,11 +133,11 @@ function removeProfession(p: Profession) {
   professions.value = professions.value.filter((x) => x !== p)
 }
 
-function togglePower(id: string) {
+function togglePower(id: PowerId) {
   powers.value = powers.value.includes(id) ? powers.value.filter((x) => x !== id) : [...powers.value, id]
 }
 
-function powerLabel(id: string): string {
+function powerLabel(id: PowerId): string {
   return index.value ? powerName(index.value, server.value, id) : id
 }
 

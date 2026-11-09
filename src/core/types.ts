@@ -46,6 +46,9 @@ export interface Run {
 export const PROFESSIONS = ['PIONEER', 'WARRIOR', 'TANK', 'SNIPER', 'CASTER', 'MEDIC', 'SUPPORT', 'SPECIAL'] as const
 export type Profession = (typeof PROFESSIONS)[number]
 
+/** 勢力 id,例如 kazimierz;國家、組織、團隊共用同一套 id。 */
+export type PowerId = string
+
 /** 卡頭「台服未實裝」徽章與壓灰小卡的懸停文字。 */
 export const TW_UNRELEASED_TITLE = '台服尚未實裝這位幹員,文字與數值取自陸服'
 
@@ -173,8 +176,8 @@ export interface IndexOperator {
   entries: IndexEntry[]
   /** 這位幹員的幹員檔的相對路徑;檔名帶內容雜湊,資料更新後不會讀到舊版。 */
   detail?: string
-  /** 它所屬的勢力清單內勢力 id(勢力與隱藏勢力),依清單順序;兩服相同或台服未實裝時省略 tw,兩服都沒有時省略整欄。 */
-  powers?: PerServer<string[]>
+  /** 它的勢力與隱藏勢力中、列在勢力清單內的勢力 id,依清單順序;兩服相同或台服未實裝時省略 tw,兩服都沒有時省略整欄。 */
+  powers?: PerServer<PowerId[]>
 }
 
 /** 屬性:最後一個階段滿級的數值,不含潛能與模組的加成。 */
@@ -228,7 +231,7 @@ export interface IndexGroup {
 
 /** 勢力面板上的一個勢力:id 與各伺服器的顯示名稱(維護者覆寫,否則用該伺服器的勢力名稱)。 */
 export interface IndexPower {
-  id: string
+  id: PowerId
   name: PerServer<string>
 }
 
@@ -251,6 +254,15 @@ export interface SearchIndex {
   operators: IndexOperator[]
 }
 
+/** 勢力清單的全部勢力,依清單順序。 */
+export function powersInListOrder(index: Pick<SearchIndex, 'powerRows'>): IndexPower[] {
+  return index.powerRows.flat()
+}
+
+export function findPower(index: Pick<SearchIndex, 'powerRows'>, id: PowerId): IndexPower | undefined {
+  return powersInListOrder(index).find((p) => p.id === id)
+}
+
 // ---------- 查詢 ----------
 
 /** 搜尋條件:效果類型 + 關鍵字,例如施加-暈眩。 */
@@ -268,7 +280,7 @@ export interface QueryOptions {
   /** 職業條件:彼此 OR,與搜尋條件 AND;沒有搜尋條件時列出這些職業的全部幹員。 */
   professions?: Profession[]
   /** 勢力條件(勢力 id):彼此 OR,與搜尋條件、職業條件 AND;依目前伺服器的勢力與隱藏勢力判定。 */
-  powers?: string[]
+  powers?: PowerId[]
 }
 
 export interface ResultStage {

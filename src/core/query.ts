@@ -15,6 +15,7 @@ import type {
   OperatorDetail,
   OperatorFile,
   OperatorPowers,
+  PowerId,
   QueryOptions,
   ResultEntry,
   ResultOperator,
@@ -25,7 +26,7 @@ import type {
   SkillStats,
   TrustedAttribute,
 } from './types'
-import { onServer, PROFESSION_LABELS, PROFESSIONS, type Profession, SP_TYPE_LABELS, sortTypes, TRIGGER_LABELS } from './types'
+import { findPower, onServer, PROFESSION_LABELS, PROFESSIONS, type Profession, SP_TYPE_LABELS, sortTypes, TRIGGER_LABELS } from './types'
 import { DATA_SOURCES, type DataSource, prtsUrl, repoUrl } from './sources'
 
 /** 敘述所屬的幹員:索引裡的幹員或幹員檔,兩者都帶模組、召喚物與敘述。 */
@@ -113,12 +114,17 @@ function resultStage(v: Visible, visible: Visible[], op: Owner, opts: Pick<Query
   return result
 }
 
+/** 在這個伺服器模式下看得到:台服模式看不到台服未實裝的。 */
+function visibleOn(x: { inTw: boolean }, server: Server): boolean {
+  return server === 'cn' || x.inTw
+}
+
 /** 某個伺服器模式下看得到的敘述:台服模式略過台服未實裝的幹員與召喚物。 */
 function* visibleEntries(op: Owner, server: Server): Generator<{ entry: IndexEntry; summon?: IndexSummon }> {
-  if (server === 'tw' && !op.inTw) return
+  if (!visibleOn(op, server)) return
   for (const entry of op.entries) {
     const summon = entry.summon ? op.summons.find((s) => s.id === entry.summon) : undefined
-    if (server === 'tw' && summon && !summon.inTw) continue
+    if (summon && !visibleOn(summon, server)) continue
     yield { entry, summon }
   }
 }
@@ -175,7 +181,7 @@ function passesFilters(op: IndexOperator, opts: QueryOptions): boolean {
   return true
 }
 
-function powersOn(op: IndexOperator, server: Server): string[] {
+function powersOn(op: IndexOperator, server: Server): PowerId[] {
   return op.powers ? onServer(op.powers, server) : []
 }
 
@@ -294,7 +300,7 @@ export function query(index: SearchIndex, opts: QueryOptions): ResultOperator[] 
   if (!startsSearch(opts)) return []
   const results: ResultOperator[] = []
   for (const op of [...index.operators].sort(compareOperators(index))) {
-    if (opts.server === 'tw' && !op.inTw) continue
+    if (!visibleOn(op, opts.server)) continue
     if (!passesFilters(op, opts)) continue
     const r = resultOperator(op, branchName(index, op), opts)
     if (r) results.push(r)
@@ -393,13 +399,13 @@ export function keywordGroups(index: SearchIndex, server: Server): PanelGroup[] 
 }
 
 export interface PanelPower {
-  id: string
+  id: PowerId
   name: string
 }
 
 /** 勢力在某伺服器的顯示名稱;不在清單的勢力用 id。 */
-export function powerName(index: SearchIndex, server: Server, id: string): string {
-  const power = index.powerRows.flat().find((p) => p.id === id)
+export function powerName(index: SearchIndex, server: Server, id: PowerId): string {
+  const power = findPower(index, id)
   return power ? onServer(power.name, server) : id
 }
 
@@ -408,8 +414,8 @@ export function powerName(index: SearchIndex, server: Server, id: string): strin
  * 星級篩選、職業條件、搜尋條件不影響面板。
  */
 export function powerPanel(index: SearchIndex, server: Server): PanelPower[][] {
-  const withMembers = new Set<string>()
-  for (const op of index.operators) if (server === 'cn' || op.inTw) for (const p of powersOn(op, server)) withMembers.add(p)
+  const withMembers = new Set<PowerId>()
+  for (const op of index.operators) if (visibleOn(op, server)) for (const p of powersOn(op, server)) withMembers.add(p)
   return index.powerRows
     .map((row) => row.filter((p) => withMembers.has(p.id)).map((p) => ({ id: p.id, name: onServer(p.name, server) })))
     .filter((row) => row.length > 0)

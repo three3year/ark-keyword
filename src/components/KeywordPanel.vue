@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { keywordGroups, powerPanel } from '../core/query'
-import type { SearchIndex, Server } from '../core/types'
+import type { PowerId, SearchIndex, Server } from '../core/types'
 
 const props = defineProps<{
   index: SearchIndex
   server: Server
   selected: string[]
-  powers: string[]
+  powers: PowerId[]
 }>()
-const emit = defineEmits<{ toggle: [id: string]; togglePower: [id: string] }>()
+const emit = defineEmits<{ toggle: [id: string]; togglePower: [id: PowerId] }>()
 
 const groups = computed(() => keywordGroups(props.index, props.server))
-const powerRows = computed(() => powerPanel(props.index, props.server))
+const powerPanelRows = computed(() => powerPanel(props.index, props.server))
 </script>
 
 <template>
@@ -34,9 +34,9 @@ const powerRows = computed(() => powerPanel(props.index, props.server))
         </button>
       </div>
     </section>
-    <section v-if="powerRows.length > 0" class="kw-group">
+    <section v-if="powerPanelRows.length > 0" class="kw-group">
       <h2 class="kw-group-name">勢力</h2>
-      <div v-for="(row, i) in powerRows" :key="i" class="kw-list">
+      <div v-for="(row, i) in powerPanelRows" :key="i" class="kw-list">
         <button
           v-for="p in row"
           :key="p.id"

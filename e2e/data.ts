@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs'
 import type { Page } from '@playwright/test'
+import { type PowerList, powerListEntry } from '../build/buildIndex'
 import {
   type OperatorAttributes,
   type OperatorFile,
   type OperatorPowers,
+  type PowerId,
+  findPower,
   onServer,
   PROFESSION_LABELS,
   type SearchIndex,
@@ -28,13 +31,13 @@ export function groupRowNames(group: string, row: number): string[] {
   return found.rows[row].map(keywordName)
 }
 
-export function powerListRows(): string[][] {
-  const list: (string | { id: string })[][] = JSON.parse(readFileSync('data/power-list.json', 'utf8'))
-  return list.map((row) => row.map((item) => (typeof item === 'string' ? item : item.id)))
+export function powerListRows(): PowerId[][] {
+  const list: PowerList = JSON.parse(readFileSync('data/power-list.json', 'utf8'))
+  return list.map((row) => row.map((item) => powerListEntry(item).id))
 }
 
-export function powerDisplayName(id: string, server: Server = 'cn'): string {
-  const power = index.powerRows.flat().find((p) => p.id === id)
+export function powerDisplayName(id: PowerId, server: Server = 'cn'): string {
+  const power = findPower(index, id)
   if (!power) throw new Error(`索引沒有勢力 ${id}`)
   return onServer(power.name, server)
 }
