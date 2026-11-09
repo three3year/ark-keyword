@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { prepareAvatars, prepareSkillIcons } from './images'
 import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, type PowerList, skillIconId, skillIconPath, type SupplementKeyword } from './buildIndex'
+import type { AuditSeeds } from './audit'
 import type { RawServer } from './raw'
 import { diffWarnings, KNOWN_WARNINGS, NEW_WARNINGS, RESOLVED_WARNINGS } from './warnings'
 import { DATA_SOURCES, rawBase } from '../src/core/sources'
@@ -97,8 +98,9 @@ async function main() {
   const prtsPages = await readJson<Record<string, string>>(join(ROOT, 'data', 'prts-pages.json'))
   const twPowerNames = await readJson<Record<string, string>>(join(ROOT, 'data', 'tw-power-names.json'))
   const powerList = await readJson<PowerList>(join(ROOT, 'data', 'power-list.json'))
+  const auditSeeds = await readJson<AuditSeeds>(join(ROOT, 'data', 'audit-seeds.json'))
   const knownWarnings = await readJson<string[]>(KNOWN_WARNINGS)
-  const { index, operatorFiles, warnings, pending } = buildIndex({ cn, tw, groups, supplements, overrides, excludedTerms, prtsPages, twPowerNames, powerList })
+  const { index, operatorFiles, warnings, pending, suspects } = buildIndex({ cn, tw, groups, supplements, overrides, excludedTerms, prtsPages, twPowerNames, powerList, auditSeeds })
 
   // 頭像:職業形態(阿米婭)沒有專屬頭像時改用預設形態
   const formDefault = new Map<string, string>()
@@ -139,6 +141,8 @@ async function main() {
   await writeFile(join(REVIEW_DIR, 'build-warnings.txt'), warnings.join('\n') + '\n')
   await writeFile(join(REVIEW_DIR, 'pending-review.json'), JSON.stringify(pending, null, 1))
   console.log(`待複核:${pending.length} 個配對(review/pending-review.json)`)
+  await writeFile(join(REVIEW_DIR, 'suspects.json'), JSON.stringify(suspects, null, 1))
+  console.log(`疑似漏標:共 ${suspects.length} 則(review/suspects.json)`)
 
   const { newWarnings, resolvedWarnings } = diffWarnings(warnings, knownWarnings)
   await writeFile(NEW_WARNINGS, JSON.stringify(newWarnings, null, 2) + '\n')
