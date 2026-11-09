@@ -150,10 +150,13 @@ class Builder {
   readonly excluded: Set<string>
   /** 勢力清單裡的勢力 id,依清單順序。 */
   readonly listed: string[]
+  /** 陸服勢力名稱 → 勢力 id。 */
+  readonly powerIdByName: Map<string, string>
 
   constructor(readonly input: BuildInput) {
     this.excluded = new Set(input.excludedTerms)
     this.listed = listedPowerIds(input.powerList ?? [])
+    this.powerIdByName = new Map(Object.values(input.cn.handbookTeamTable ?? {}).map((p) => [p.powerName, p.powerId]))
     const supplements = input.supplements ?? []
     this.matchers = {
       cn: supplements.map((s) => ({ id: supplementId(s), strings: s.cn })),
@@ -274,6 +277,7 @@ class Builder {
       })
       for (const e of summonEntries) entries.push({ ...e, summon: summonId })
     }
+    this.checkUnlistedPowers(id, entries)
 
     const twEquips = this.input.tw?.uniequipTable?.equipDict ?? {}
     const indexModules: IndexModule[] = modules.map((m) => {
@@ -314,6 +318,19 @@ class Builder {
     const tw = twChar ? of(twChar) : cn
     if (cn.length === 0 && tw.length === 0) return undefined
     return tw.join() === cn.join() ? { cn } : { cn, tw }
+  }
+
+  /** 天賦或技能(含召喚物的)陸服文字裡,【】內是勢力名稱、該勢力卻不在清單時發警告。特性不檢查。 */
+  checkUnlistedPowers(id: string, entries: IndexEntry[]) {
+    for (const e of entries) {
+      if (e.kind === 'trait') continue
+      const source = `${e.summon ? `召喚物 ${e.summon} ` : ''}${e.kind === 'talent' ? '天賦' : '技能'}${e.no}`
+      for (const stage of e.stages)
+        for (const [, name] of plainText(stage.cn.runs).matchAll(BRACKETED)) {
+          const powerId = this.powerIdByName.get(name)
+          if (powerId && !this.listed.includes(powerId)) this.warnOnce(`幹員 ${id} ${source}:【${name}】是勢力清單外的勢力 ${powerId}`)
+        }
+    }
   }
 
   /** 勢力面板:清單的行,每個勢力帶各伺服器的顯示名稱。 */
@@ -757,6 +774,7 @@ function skillValues(level: RawSkillLevel) {
 }
 
 const NUMBER = /\d+(?:\.\d+)?/g
+const BRACKETED = /【([^】]+)】/g
 
 /** 比較陸服與台服文字是否「一致」:術語順序、數值、補充關鍵字都相同。 */
 function signature(runs: Run[]): string {
