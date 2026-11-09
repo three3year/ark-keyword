@@ -8,7 +8,7 @@ import { prepareAvatars, prepareSkillIcons } from './images'
 import { attachOperatorFiles, buildIndex, type KeywordGroup, type Overrides, type PowerList, skillIconId, skillIconPath, type SupplementKeyword, type TermMatch } from './buildIndex'
 import type { AuditSeeds } from './audit'
 import type { RawServer } from './raw'
-import { diffWarnings, KNOWN_WARNINGS, NEW_WARNINGS, RESOLVED_WARNINGS } from './warnings'
+import { diffKnown, KNOWN_LISTS } from './known'
 import { DATA_SOURCES, rawBase } from '../src/core/sources'
 
 const ROOT = join(import.meta.dirname, '..')
@@ -100,7 +100,8 @@ async function main() {
   const twPowerNames = await readJson<Record<string, string>>(join(ROOT, 'data', 'tw-power-names.json'))
   const powerList = await readJson<PowerList>(join(ROOT, 'data', 'power-list.json'))
   const auditSeeds = await readJson<AuditSeeds>(join(ROOT, 'data', 'audit-seeds.json'))
-  const knownWarnings = await readJson<string[]>(KNOWN_WARNINGS)
+  const knownWarnings = await readJson<string[]>(KNOWN_LISTS.warnings.known)
+  const knownSuspects = await readJson<string[]>(KNOWN_LISTS.suspects.known)
   const { index, operatorFiles, warnings, pending, suspects } = buildIndex({ cn, tw, groups, supplements, termMatches, overrides, excludedTerms, prtsPages, twPowerNames, powerList, auditSeeds })
 
   // 頭像:職業形態(阿米婭)沒有專屬頭像時改用預設形態
@@ -143,18 +144,29 @@ async function main() {
   await writeFile(join(REVIEW_DIR, 'pending-review.json'), JSON.stringify(pending, null, 1))
   console.log(`待複核:${pending.length} 個配對(review/pending-review.json)`)
   await writeFile(join(REVIEW_DIR, 'suspects.json'), JSON.stringify(suspects, null, 1))
+  const suspectDiff = diffKnown(suspects.map((s) => s.key), knownSuspects)
+  const addedKeys = new Set(suspectDiff.added)
+  const newSuspects = suspects.filter((s) => addedKeys.has(s.key))
+  await writeFile(KNOWN_LISTS.suspects.added, JSON.stringify(newSuspects, null, 1) + '\n')
+  await writeFile(KNOWN_LISTS.suspects.resolved, JSON.stringify(suspectDiff.resolved, null, 2) + '\n')
   console.log(`疑似漏標:共 ${suspects.length} 則(review/suspects.json)`)
+  console.log(`  新的疑似漏標:${newSuspects.length} 則(review/new-suspects.json)`)
+  console.log(`  已消失的已知疑似漏標:${suspectDiff.resolved.length} 則(review/resolved-suspects.json)`)
+  printFirst('⚠ 新的疑似漏標前 10 則:', newSuspects.map((s) => `${s.key}(${s.where})`))
 
-  const { newWarnings, resolvedWarnings } = diffWarnings(warnings, knownWarnings)
-  await writeFile(NEW_WARNINGS, JSON.stringify(newWarnings, null, 2) + '\n')
-  await writeFile(RESOLVED_WARNINGS, JSON.stringify(resolvedWarnings, null, 2) + '\n')
+  const warningDiff = diffKnown(warnings, knownWarnings)
+  await writeFile(KNOWN_LISTS.warnings.added, JSON.stringify(warningDiff.added, null, 2) + '\n')
+  await writeFile(KNOWN_LISTS.warnings.resolved, JSON.stringify(warningDiff.resolved, null, 2) + '\n')
   console.log(`警告:共 ${warnings.length} 則(review/build-warnings.txt)`)
-  console.log(`  新警告:${newWarnings.length} 則(review/new-warnings.json)`)
-  console.log(`  已消失的已知警告:${resolvedWarnings.length} 則(review/resolved-warnings.json)`)
-  if (newWarnings.length > 0) {
-    console.warn('⚠ 新警告前 10 則:')
-    for (const w of newWarnings.slice(0, 10)) console.warn('  ' + w)
-  }
+  console.log(`  新警告:${warningDiff.added.length} 則(review/new-warnings.json)`)
+  console.log(`  已消失的已知警告:${warningDiff.resolved.length} 則(review/resolved-warnings.json)`)
+  printFirst('⚠ 新警告前 10 則:', warningDiff.added)
+}
+
+function printFirst(title: string, lines: string[]) {
+  if (lines.length === 0) return
+  console.warn(title)
+  for (const line of lines.slice(0, 10)) console.warn('  ' + line)
 }
 
 main().catch((err) => {
