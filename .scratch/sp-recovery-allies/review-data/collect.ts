@@ -1,10 +1,3 @@
-// 友方技力回復重新複核的資料塊。在 repo 根執行:npx tsx .scratch/sp-recovery-allies/review-data/collect.ts
-//
-// 1. 拿掉覆寫檔裡所有 sup.sprecovery 的配對後建置一次索引:所有友方技力回復配對(含新比對字串產生的)都會列為待複核,
-//    帶出原文與出處;配對 id 就是覆寫檔的鍵。
-// 2. 用完整覆寫檔建置一次,取出已知疑似漏標清單裡友方技力回復的條目目前的前後文與出處。
-// 3. 和 judgements.json(逐筆建議判定與理由)合併,寫出 pairs.json 與 suspects.json 兩個資料塊。
-// 不寫 public/data 與 review/。
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildIndex, type BuildInput, type Overrides, type SupplementKeyword } from '../../../build/buildIndex'
@@ -54,13 +47,10 @@ const input: BuildInput = {
   auditSeeds: data('audit-seeds'),
 }
 
-// ---------- 配對 ----------
-
 const stripped = Object.fromEntries(Object.entries(overrides).filter(([k]) => !k.endsWith(`:${KEYWORD}`)))
 const strippedBuild = buildIndex({ ...input, overrides: stripped })
 const pairs = strippedBuild.pending.filter((p) => p.keyword === KEYWORD)
 
-// 幹員名、召喚物名、模組代號
 const names = new Map<string, string>()
 const moduleCodes = new Map<string, string>()
 for (const op of strippedBuild.operatorFiles) {
@@ -79,10 +69,8 @@ function readWhere(where: string): { who: string; source: string; server: 'cn' |
 }
 
 const matchStrings = (server: 'cn' | 'tw') => supplements.find((s) => `sup.${s.id}` === KEYWORD)![server]
-/** 原文裡實際比對到的字串(依伺服器的比對字串清單)。 */
 const marksIn = (text: string, server: 'cn' | 'tw') => matchStrings(server).filter((m) => text.includes(m))
 
-/** 建議判定;unsure 是拿不準、要維護者另外決定的。 */
 interface Judgement {
   verdict: 'apply' | 'empty'
   unsure?: boolean
@@ -140,8 +128,6 @@ writeFileSync(
   ) + '\n',
 )
 
-// ---------- 已知疑似漏標 ----------
-
 const known = data<string[]>('known-suspects').filter((k) => k.split(' ')[1] === KEYWORD)
 const fullBuild = buildIndex(input)
 const suspects = new Map(fullBuild.suspects.map((s) => [s.key, s]))
@@ -188,8 +174,6 @@ writeFileSync(
     1,
   ) + '\n',
 )
-
-// ---------- 摘要 ----------
 
 const count = (pred: (j: Judgement) => boolean) => pairs.filter((p) => judgements[p.key] && pred(judgements[p.key])).length
 console.log(`配對 ${pairs.length} 筆(覆寫 ${pairs.filter((p) => overrides[p.key]).length}、新 ${pairs.filter((p) => !overrides[p.key]).length})`)

@@ -3,7 +3,6 @@
 // 每段敘述(技能、天賦、特性的某個階段)都由一個「產生器」對陸服與台服各解析一次:
 // 陸服文字用於陸服模式的比對;台服文字用於台服模式的比對與顯示,
 // 並在術語、數值、補充關鍵字都和陸服一致時,供陸服模式改顯示繁中。
-// 台服漏標而陸服有標的術語,先照陸服的標記補上,再比對術語比對清單與補充關鍵字。
 // 模組3 階段只有陸服資料(台服資料庫沒有模組戰鬥資料)。
 import { createHash } from 'node:crypto'
 import type {
@@ -569,10 +568,6 @@ class Builder {
     return out
   }
 
-  /**
-   * 以產生器分別產生陸服與台服文字,組成一個階段。陸服沒有這段敘述時回傳 undefined。
-   * 兩服是否一致以拿掉空類型補充關鍵字標記之前的文字比較。
-   */
   stage(owner: string, entry: Pick<IndexEntry, 'kind' | 'no'>, head: Pick<IndexStage, 'kind' | 'module'>, produce: Producer): IndexStage | undefined {
     const cnRuns = produce('cn')
     if (!cnRuns) return undefined
@@ -596,10 +591,6 @@ class Builder {
     return stage
   }
 
-  /**
-   * 照陸服補標:陸服官方標記數多於台服的術語,以台服名稱在台服純文字裡比對,補標成陸服的 id。
-   * 同一個台服名稱對到陸服兩個以上的 id 時分不出位置,這個名稱不標並發警告。
-   */
   tagFromCn(cnOfficial: Run[], twOfficial: Run[], where: string): { runs: Run[]; ambiguous: Set<string> } {
     const twCounts = markCounts(twOfficial)
     const twTerms = this.input.tw?.gamedataConst.termDescriptionDict ?? {}
@@ -622,7 +613,6 @@ class Builder {
     return { runs: markTextMatches(twOfficial, matchers), ambiguous }
   }
 
-  /** 全部標記完成後,台服某個術語的標記數仍少於陸服官方標記數時發警告;同名不同 id 已警告過的不再發。 */
   warnMissingFromCn(cnOfficial: Run[], twFinal: Run[], ambiguous: Set<string>, where: string) {
     const twCounts = markCounts(twFinal)
     const twTerms = this.input.tw?.gamedataConst.termDescriptionDict ?? {}
@@ -727,7 +717,6 @@ function isOperator(id: string, char: RawCharacter): boolean {
   return id.startsWith('char_') && (PROFESSIONS as readonly string[]).includes(char.profession) && !char.isNotObtainable
 }
 
-/** 效果類型為空的補充關鍵字拿掉標記,變回純文字(術語照舊標記)。 */
 function withoutEmptySupplements(text: IndexText): IndexText {
   const empty = (k: string | undefined) => !!k?.startsWith('sup.') && text.hits[k]?.length === 0
   if (!text.runs.some((r) => empty(r.k))) return text
@@ -736,7 +725,6 @@ function withoutEmptySupplements(text: IndexText): IndexText {
   return { ...text, runs }
 }
 
-/** 每個術語的標記數:連續帶同一個術語的 runs(標記因樣式拆成幾段)算一個標記。 */
 function markCounts(runs: Run[]): Map<string, number> {
   const counts = new Map<string, number>()
   runs.forEach((r, i) => {

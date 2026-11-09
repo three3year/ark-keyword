@@ -21,7 +21,6 @@ export interface Suspect {
 interface AuditTarget {
   keyword: string
   seeds: string[]
-  /** 整段敘述已有其中任一個關鍵字的配對(含效果類型為空而拿掉標記的),就不掃這段。 */
   satisfiedBy: Set<string>
 }
 
@@ -30,7 +29,6 @@ interface AuditText {
   operator: string
   where: string
   text: string
-  /** 這段敘述有配對的關鍵字。 */
   keywords: string[]
   keywordAt: (string | undefined)[]
 }

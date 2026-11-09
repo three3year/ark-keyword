@@ -17,7 +17,6 @@ const TW_TERMS: Record<string, [string, string]> = {
   'ba.dt.apoptosis2': ['凋亡損傷·我方', '我方的凋亡損傷'],
 }
 
-/** 每位幹員一個技能,技能敘述由參數給定。 */
 function fixture(terms: Record<string, [string, string]>, descriptions: Record<string, string>) {
   const operators = Object.fromEntries(Object.keys(descriptions).map((name, i) => [`char_810_${i}`, operator({ name, skills: [`sk_${i}`] })]))
   const skills = Object.values(descriptions).map((d, i) => basicSkill(`sk_${i}`, `技${i}`, { description: d }))

@@ -93,7 +93,6 @@ describe('補充關鍵字', () => {
   })
 
   describe('效果類型為空的補充關鍵字配對不標記', () => {
-    /** 建一次索引,依敘述文字與關鍵字決定待複核配對的覆寫,再帶著這份覆寫重建。 */
     function buildReviewed(input: BuildInput, decide: (text: string, keyword: string) => EffectType[]) {
       const first = buildIndex(input)
       const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: decide(p.text, p.keyword), reviewed: true }]))
@@ -141,7 +140,6 @@ describe('補充關鍵字', () => {
       const { pending, operatorFiles } = buildReviewed(input, () => [])
       expect(pending).toEqual([])
       const detail = (srv: 'cn' | 'tw') => operatorDetail(operatorFiles[0], { server: srv, conditions: [], branchName: '' }).tabs[0].entries[0].stages[0].runs
-      // 陸服模式在兩服一致時顯示台服那份文字
       expect(plain(detail('cn'))).toBe('將敵人推開')
       expect(highlights(detail('cn'))).toEqual([])
       expect(highlights(detail('tw'))).toEqual([])
