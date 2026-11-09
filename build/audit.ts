@@ -58,9 +58,14 @@ function termTargets(input: BuildInput, ids: Set<string>): AuditTarget[] {
   return [...groups]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([keyword, members]) => {
-      const names = members.flatMap((id) => dicts.map((d) => d[id]?.termName.replace(OWN_SIDE, '')))
+      const names = members.flatMap((id) => dicts.map((d) => d[id] && withoutOwnSide(d[id].termName)))
       return { keyword, seeds: [...new Set(names.filter((n): n is string => !!n))], satisfiedBy: new Set(members) }
     })
+}
+
+/** 術語名稱去掉「·我方」後綴:「·我方」版與敵方版在敘述裡寫成同一個名稱。 */
+export function withoutOwnSide(termName: string): string {
+  return termName.replace(OWN_SIDE, '')
 }
 
 /** 同名的「·我方」術語(id 多一個結尾 2)併到不帶 2 的 id 名下。 */
