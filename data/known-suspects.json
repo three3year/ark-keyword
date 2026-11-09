@@ -79,8 +79,6 @@
   "tw sup.sprecovery 未開啟技能且技力小於或等於最大值",
   "cn sup.sprecovery 获得#（+#）技力",
   "tw sup.sprecovery 獲得#（+#）技力",
-  "cn sup.sprecovery 赛思立刻获得#技力；且部署当前复制",
-  "cn sup.sprecovery 使其立刻获得#技力",
   "cn sup.sprecovery 置为高台装置回复技力和生命的效果翻倍",
   "tw sup.sprecovery 置為高台裝置回復技力和生命的效果翻倍",
   "cn sup.sprecovery 人时无法自我回复技力，阻挡敌人时恢复",
