@@ -10,7 +10,7 @@
     "name": "減益",
     "rows": [
       ["sup.silence", "ba.cold", "ba.weightless", "ba.steal", "ba.debuff"],
-      ["ba.weaken", "ba.fragile", "ba.physicfragile", "ba.magicfragile", "ba.elementfragile"]
+      ["sup.defdown", "sup.resdown", "ba.weaken", "ba.fragile", "ba.physicfragile", "ba.magicfragile", "ba.elementfragile"]
     ]
   },
   {

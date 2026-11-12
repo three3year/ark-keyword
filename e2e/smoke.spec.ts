@@ -408,6 +408,44 @@ test('友方技力回復:在增益分組緊接鼓舞之後;點了之後只列出
   await expect(tip).toContainText('非官方')
 })
 
+test('減抗:在減益分組第二行緊接減防之後、虛弱之前;點了之後伊芙利特在結果裡,懸停看得到非官方定義', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const debuff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '減益', exact: true }) })
+  await expect(debuff.getByRole('button', { name: '虛弱', exact: true })).toBeVisible()
+  const names = (await debuff.locator('.kw-list').nth(1).locator('.kw').allTextContents()).map((t) => t.trim())
+  expect(names.slice(0, 3)).toEqual(['減防', '減抗', '虛弱'])
+
+  await debuff.getByRole('button', { name: '減抗', exact: true }).click()
+  const ifrit = page.getByTestId('result-card').filter({ has: page.getByRole('heading', { name: '伊芙利特', exact: true }) })
+  await expect(ifrit).toHaveCount(1)
+
+  await ifrit.locator('mark.hl', { hasText: '法術抗性' }).first().hover()
+  const tip = page.getByTestId('tip')
+  await expect(tip).toContainText('降低敵人的法術抗性。')
+  await expect(tip).toContainText('非官方')
+})
+
+test('減防:在減益分組第二行最前面、減抗之前;點了之後流星、伊芙利特在結果裡,銀灰、真理不在,懸停看得到非官方定義', async ({ page }) => {
+  await page.goto('./')
+  const panel = page.getByRole('complementary', { name: '關鍵字面板' })
+  const debuff = panel.locator('.kw-group').filter({ has: page.getByRole('heading', { name: '減益', exact: true }) })
+  await expect(debuff.getByRole('button', { name: '虛弱', exact: true })).toBeVisible()
+  const names = (await debuff.locator('.kw-list').nth(1).locator('.kw').allTextContents()).map((t) => t.trim())
+  expect(names.slice(0, 2)).toEqual(['減防', '減抗'])
+
+  await debuff.getByRole('button', { name: '減防', exact: true }).click()
+  const cards = page.getByTestId('result-card')
+  const card = (name: string) => cards.filter({ has: page.getByRole('heading', { name, exact: true }) })
+  for (const name of ['流星', '伊芙利特']) await expect(card(name)).toHaveCount(1)
+  for (const name of ['銀灰', '真理']) await expect(card(name)).toHaveCount(0)
+
+  await card('流星').locator('mark.hl', { hasText: '防禦力' }).first().hover()
+  const tip = page.getByTestId('tip')
+  await expect(tip).toContainText('降低敵人的防禦力。')
+  await expect(tip).toContainText('非官方')
+})
+
 test('勢力分組在面板最下面,一行對應清單的一行;陸服有 S.E.E.S.,台服沒有', async ({ page }) => {
   await page.goto('./')
   const panel = page.getByRole('complementary', { name: '關鍵字面板' })

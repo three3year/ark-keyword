@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type BuildInput, type Overrides, type SupplementKeyword, buildIndex } from '../build/buildIndex'
 import { keywordGroups, operatorDetail, query } from '../src/core/query'
-import type { EffectType } from '../src/core/types'
+import type { EffectType, SearchIndex, Server } from '../src/core/types'
 import realSupplements from '../data/supplementary-keywords.json'
 import { applying, COMMON_TERMS, basicSkill, highlights, operator, plain, server } from './fixtures'
 
@@ -16,6 +16,26 @@ function buildWithPendingReviewedAsApply(input: BuildInput) {
   const first = buildIndex(input)
   const overrides: Overrides = Object.fromEntries(first.pending.map((p) => [p.key, { types: ['apply'], reviewed: true }]))
   return buildIndex({ ...input, overrides })
+}
+
+type SupplementCase = [name: string, cn: string, tw: string]
+
+/** 每個案例一位幹員、一個技能;陸服用陣列格式的原始資料,台服用物件格式。 */
+function bothServers(idPrefix: number, cases: SupplementCase[]) {
+  const operators = (style: 'array' | 'object') =>
+    Object.fromEntries(cases.map(([name], i) => [`char_${idPrefix}_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
+  const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
+  return {
+    cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
+    tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
+  }
+}
+
+function expectUnofficialKeyword(index: SearchIndex, srv: Server, id: string, expected: { name: string; definition: string }) {
+  const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === id)!
+  expect(keyword.name).toBe(expected.name)
+  expect(keyword.unofficial).toBe(true)
+  expect(plain(keyword.definition)).toBe(expected.definition)
 }
 
 function fixture(descriptions: Record<string, string>) {
@@ -63,7 +83,7 @@ describe('補充關鍵字', () => {
   })
 
   describe('友方技力回復(維護者清單的比對字串)', () => {
-    const cases: [name: string, cn: string, tw: string][] = [
+    const cases: SupplementCase[] = [
       ['瞬間回復', '治疗友方单位时，使目标额外回复2点技力', '治療友方單位時，使目標額外回復2點技力'],
       ['擊殺回復', '击杀敌人后，攻击范围内所有友方干员技力+2', '擊殺敵人後，攻擊範圍內所有友方幹員技力+2'],
       ['回復速度', '攻击范围内的友方干员技力回复速度+0.3/秒', '攻擊範圍內的友方幹員技力回復速度+0.3/秒'],
@@ -71,24 +91,59 @@ describe('補充關鍵字', () => {
       ['立刻獲得', '部署当前复制的干员时使其立刻获得10技力', '部署當前複製的幹員時使其立刻獲得10技力'],
       ['只提技力', '技力满时可使用装备应变来开启技能', '技力滿時可使用裝備應變來開啟技能'],
     ]
-    function servers() {
-      const operators = (style: 'array' | 'object') =>
-        Object.fromEntries(cases.map(([name], i) => [`char_700_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
-      const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
-      return {
-        cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
-        tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
-      }
-    }
-
     test.each(['cn', 'tw'] as const)('%s:給其他友方幹員的瞬間回復、擊殺回復、回復速度、初始技力、立刻獲得命中,只提到技力的不命中', (srv) => {
-      const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
+      const { index } = buildWithPendingReviewedAsApply({ ...bothServers(700, cases), supplements: realSupplements })
       const results = query(index, { conditions: applying('sup.sprecovery'), server: srv })
       expect(results.map((r) => r.name).sort()).toEqual(['初始技力', '回復速度', '擊殺回復', '瞬間回復', '立刻獲得'].sort())
-      const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.sprecovery')!
-      expect(keyword.name).toBe('友方技力回復')
-      expect(keyword.unofficial).toBe(true)
-      expect(plain(keyword.definition)).toBe('使其他友方幹員立即獲得技力、提高初始技力,或提升技力的回復速度。')
+      expectUnofficialKeyword(index, srv, 'sup.sprecovery', { name: '友方技力回復', definition: '使其他友方幹員立即獲得技力、提高初始技力,或提升技力的回復速度。' })
+    })
+  })
+
+  describe('減抗(維護者清單的比對字串)', () => {
+    const cases: SupplementCase[] = [
+      ['百分比', '攻击范围内的敌军法术抗性-40%', '攻擊範圍內的敵軍法術抗性-40%'],
+      ['固定值', '使目标法术抗性-10，持续5秒', '使目標法術抗性-10，持續5秒'],
+      ['無視法抗', '攻击时无视目标20点法术抗性', '攻擊時無視目標20點法術抗性'],
+    ]
+    test.each(['cn', 'tw'] as const)('%s:「法術抗性-」命中並高亮,無視法抗不命中;定義標為非官方', (srv) => {
+      const { index } = buildWithPendingReviewedAsApply({ ...bothServers(710, cases), supplements: realSupplements })
+      const results = query(index, { conditions: applying('sup.resdown'), server: srv })
+      expect(results.map((r) => r.name).sort()).toEqual(['百分比', '固定值'].sort())
+      for (const r of results) expect(highlights(r.entries[0].stages[0].runs)).toEqual([['法術抗性-', 'sup.resdown']])
+      expectUnofficialKeyword(index, srv, 'sup.resdown', { name: '減抗', definition: '降低敵人的法術抗性。' })
+    })
+  })
+
+  describe('減防(維護者清單的比對字串)', () => {
+    const cases: SupplementCase[] = [
+      ['減號', '攻击使目标防御力-30%，持续5秒', '攻擊使目標防禦力-30%，持續5秒'],
+      ['下降', '被击中的敌人防御力下降20%', '被擊中的敵人防禦力下降20%'],
+      ['降低', '攻击范围内的敌人防御力降低7%', '攻擊範圍內的敵人防禦力降低7%'],
+      ['召喚物', '召唤物会降低被阻挡单位的防御力', '召喚物會降低被阻擋單位的防禦力'],
+      ['雙降', '攻击范围内的敌人防御力-100，法术抗性-10', '攻擊範圍內的敵人防禦力-100，法術抗性-10'],
+      ['無視防禦', '攻击时无视目标200点防御力', '攻擊時無視目標200點防禦力'],
+      ['提升防禦', '防御力+30%，持续20秒', '防禦力+30%，持續20秒'],
+      ['偷取防禦', '攻击时偷取目标50点防御力', '攻擊時偷取目標50點防禦力'],
+    ]
+    test.each(['cn', 'tw'] as const)('%s:「防禦力-」「下降」「降低」「降低被阻擋單位的防禦力」命中並高亮,無視、提升、偷取不命中;定義標為非官方', (srv) => {
+      const { index } = buildWithPendingReviewedAsApply({ ...bothServers(720, cases), supplements: realSupplements })
+      const results = query(index, { conditions: applying('sup.defdown'), server: srv })
+      expect(Object.fromEntries(results.map((r) => [r.name, highlights(r.entries[0].stages[0].runs)]))).toEqual({
+        減號: [['防禦力-', 'sup.defdown']],
+        下降: [['防禦力下降', 'sup.defdown']],
+        降低: [['防禦力降低', 'sup.defdown']],
+        召喚物: [['降低被阻擋單位的防禦力', 'sup.defdown']],
+        雙降: [['防禦力-', 'sup.defdown'], ['法術抗性-', 'sup.resdown']],
+      })
+      expect(query(index, { conditions: applying('sup.resdown'), server: srv }).map((r) => r.name)).toEqual(['雙降'])
+      expectUnofficialKeyword(index, srv, 'sup.defdown', { name: '減防', definition: '降低敵人的防禦力。' })
+    })
+
+    test('cn:「防御力额外-」命中並高亮', () => {
+      const { index } = buildWithPendingReviewedAsApply({ cn: fixture({ 額外: '被阻挡的敌人防御力额外-30' }), supplements: realSupplements })
+      const [r] = query(index, { conditions: applying('sup.defdown'), server: 'cn' })
+      expect(r.name).toBe('額外')
+      expect(highlights(r.entries[0].stages[0].runs)).toEqual([['防御力额外-', 'sup.defdown']])
     })
   })
 
