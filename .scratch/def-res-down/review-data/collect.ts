@@ -3,10 +3,11 @@ import { join } from 'node:path'
 import { buildIndex, type Overrides } from '../../../build/buildIndex'
 import { loadBuildInput, readData, readJson } from '../../../build/input'
 import { query } from '../../../src/core/query'
+import type { EffectType, Server } from '../../../src/core/types'
 
 const HERE = import.meta.dirname
 const KEYWORD = process.argv[2] ?? 'sup.resdown'
-const OUT = process.argv[3] ?? 'resdown'
+const OUT = KEYWORD.replace(/^sup\./, '')
 
 const input = await loadBuildInput()
 const { overrides, supplements } = input
@@ -21,24 +22,29 @@ for (const op of build.operatorFiles) {
   for (const s of op.summons ?? []) names.set(s.id, `${name}/${s.name}`)
   for (const m of op.modules ?? []) moduleCodes.set(m.id, m.code)
 }
-function readWhere(where: string): { who: string; source: string; server: 'cn' | 'tw' } {
+function readWhere(where: string): { who: string; source: string; server: Server } {
   const server = where.endsWith('(台服)') ? 'tw' : 'cn'
   const [id, ...rest] = where.replace('(台服)', '').split(' ')
   const source = rest.join(' ').replace(/模組3 (\S+)/, (_, m: string) => `模組 ${moduleCodes.get(m) ?? m}`)
   return { who: names.get(id) ?? id, source, server }
 }
 
-const matchStrings = (server: 'cn' | 'tw') => supplements.find((s) => `sup.${s.id}` === KEYWORD)![server]
-const marksIn = (text: string, server: 'cn' | 'tw') => matchStrings(server).filter((m) => text.includes(m))
-const serverLabel = { cn: '陸服', tw: '台服' }
+const matchStrings = (server: Server) => supplements.find((s) => `sup.${s.id}` === KEYWORD)![server]
+const marksIn = (text: string, server: Server) => matchStrings(server).filter((m) => text.includes(m))
+const serverLabel: Record<Server, string> = { cn: '陸服', tw: '台服' }
 
+type Verdict = 'apply' | 'empty'
+const VERDICT: Record<Verdict, { label: string; types: EffectType[] }> = {
+  apply: { label: '施加', types: ['apply'] },
+  empty: { label: '空類型', types: [] },
+}
 interface Judgement {
-  verdict: 'apply' | 'empty'
+  verdict: Verdict
   unsure?: boolean
   reason: string
 }
 const judgements = await readJson<Record<string, Judgement>>(join(HERE, `${OUT}-judgements.json`))
-const verdictLabel = (j: Judgement) => `${j.verdict === 'apply' ? '施加' : '空類型'}${j.unsure ? '(拿不準)' : ''}`
+const verdictLabel = (j: Judgement) => `${VERDICT[j.verdict].label}${j.unsure ? '(拿不準)' : ''}`
 
 const pairRows = pairs
   .map((p) => {
@@ -53,7 +59,7 @@ const pairRows = pairs
         places.map((w) => w.source).join(';'),
         serverLabel[server],
         { text: p.text, marks: marksIn(p.text, server) },
-        p.ruleTypes.length ? '施加' : '空類型',
+        VERDICT[p.ruleTypes.length ? 'apply' : 'empty'].label,
         j ? verdictLabel(j) : null,
         j?.reason ?? null,
       ],
@@ -104,10 +110,10 @@ writeFileSync(
 
 const reviewed: Overrides = {
   ...overrides,
-  ...Object.fromEntries(Object.entries(judgements).map(([k, j]) => [k, { types: j.verdict === 'apply' ? ['apply' as const] : [], reviewed: true }])),
+  ...Object.fromEntries(Object.entries(judgements).map(([k, j]) => [k, { types: VERDICT[j.verdict].types, reviewed: true }])),
 }
 const after = buildIndex({ ...input, overrides: reviewed })
-const hitsOn = (server: 'cn' | 'tw') => query(after.index, { conditions: [{ keyword: KEYWORD, type: 'apply' }], server }).map((r) => r.name)
+const hitsOn = (server: Server) => query(after.index, { conditions: [{ keyword: KEYWORD, type: 'apply' }], server }).map((r) => r.name)
 const hits = { cn: hitsOn('cn'), tw: hitsOn('tw') }
 const everyone = [...new Set([...hits.cn, ...hits.tw])]
 writeFileSync(
@@ -120,7 +126,7 @@ writeFileSync(
 )
 
 const count = (pred: (j: Judgement) => boolean) => pairs.filter((p) => judgements[p.key] && pred(judgements[p.key])).length
-const bySrv = (srv: 'cn' | 'tw') => newSuspects.filter((s) => s.server === srv).length
+const bySrv = (srv: Server) => newSuspects.filter((s) => s.server === srv).length
 console.log(`待複核配對 ${pairs.length} 筆(全部 ${build.pending.length} 筆)`)
 console.log(`建議:施加 ${count((j) => j.verdict === 'apply' && !j.unsure)}、空類型 ${count((j) => j.verdict === 'empty' && !j.unsure)}、拿不準 ${count((j) => !!j.unsure)}、未判 ${pairs.filter((p) => !judgements[p.key]).length}`)
 console.log(`新疑似漏標 ${newSuspects.length} 則(陸服 ${bySrv('cn')}、台服 ${bySrv('tw')});漏標 ${newSuspects.filter((s) => suspectJudgements[s.key]?.verdict === 'gap').length}、未判 ${newSuspects.filter((s) => !suspectJudgements[s.key]).length}`)
