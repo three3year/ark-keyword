@@ -92,6 +92,34 @@ describe('補充關鍵字', () => {
     })
   })
 
+  describe('減抗(維護者清單的比對字串)', () => {
+    const cases: [name: string, cn: string, tw: string][] = [
+      ['百分比', '攻击范围内的敌军法术抗性-40%', '攻擊範圍內的敵軍法術抗性-40%'],
+      ['固定值', '使目标法术抗性-10，持续5秒', '使目標法術抗性-10，持續5秒'],
+      ['無視法抗', '攻击时无视目标20点法术抗性', '攻擊時無視目標20點法術抗性'],
+    ]
+    function servers() {
+      const operators = (style: 'array' | 'object') =>
+        Object.fromEntries(cases.map(([name], i) => [`char_710_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
+      const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
+      return {
+        cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
+        tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
+      }
+    }
+
+    test.each(['cn', 'tw'] as const)('%s:「法術抗性-」命中並高亮,無視法抗不命中;定義標為非官方', (srv) => {
+      const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
+      const results = query(index, { conditions: applying('sup.resdown'), server: srv })
+      expect(results.map((r) => r.name).sort()).toEqual(['百分比', '固定值'].sort())
+      for (const r of results) expect(highlights(r.entries[0].stages[0].runs)).toEqual([['法術抗性-', 'sup.resdown']])
+      const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.resdown')!
+      expect(keyword.name).toBe('減抗')
+      expect(keyword.unofficial).toBe(true)
+      expect(plain(keyword.definition)).toBe('降低敵人的法術抗性。')
+    })
+  })
+
   describe('效果類型為空的補充關鍵字配對不標記', () => {
     function buildReviewed(input: BuildInput, decide: (text: string, keyword: string) => EffectType[]) {
       const first = buildIndex(input)
