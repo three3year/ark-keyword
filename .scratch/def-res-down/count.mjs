@@ -1,5 +1,3 @@
-// 用法:node count.mjs <operators 資料夾> <cn|tw> <字串1> [字串2...]
-// 列出敘述純文字含任一字串的幹員 id 與敘述條數;召喚物的敘述在 entries 裡(帶 summon 欄位),算在幹員名下。
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 

@@ -1,6 +1,3 @@
-// 用法:node seeds.mjs <operators 資料夾>
-// 估計各種稽核種子字在陸服會產生多少個「不同的前後文」(數字換成 #,前後各 8 字),即約略的可疑處數。
-// 只算陸服;台服大致同量,稽核時兩服各算一份。
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
