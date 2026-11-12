@@ -56,7 +56,7 @@
 - **新疑似漏標 422 則**:全是減防(種子字「防禦力」「防御力」)。規格估計陸服約 214 處、兩服約 500 處,是用 `seeds.mjs` 的近似計法(沒扣掉術語佔用的字,也沒按稽核的方式合併相同前後文);實際稽核陸服 235 則、台服 187 則。新警告 0 則、已消失的已知疑似漏標 0 則。
 - **已知可疑清單**:目前 150 筆;接受 422 則後 572 筆(重建摘要的「疑似漏標:共 572 則」)。
 - **命中幹員**:把建議判定當成覆寫重建一次索引,在兩服各查「減防·施加」得出;台服只算已實裝的幹員。
-- **怎麼取出的**:在 repo 根執行 `npx tsx .scratch/def-res-down/review-data/collect.ts sup.defdown defdown`,重產下面三張表與上面的數字。建議判定與理由在同目錄的 `defdown-judgements.json`、`defdown-suspect-judgements.json`。
+- **怎麼取出的**:在 repo 根執行 `npx tsx .scratch/def-res-down/review-data/collect.ts sup.defdown`,重產下面三張表與上面的數字。建議判定與理由在同目錄的 `defdown-judgements.json`、`defdown-suspect-judgements.json`。
 - **這次沒動的**:覆寫檔、已知可疑清單都還沒寫;重建出的 `public/data` 已還原。
 
 ## 配對清單(53 筆)
