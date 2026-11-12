@@ -120,6 +120,52 @@ describe('補充關鍵字', () => {
     })
   })
 
+  describe('減防(維護者清單的比對字串)', () => {
+    const cases: [name: string, cn: string, tw: string][] = [
+      ['減號', '攻击使目标防御力-30%，持续5秒', '攻擊使目標防禦力-30%，持續5秒'],
+      ['下降', '被击中的敌人防御力下降20%', '被擊中的敵人防禦力下降20%'],
+      ['降低', '攻击范围内的敌人防御力降低7%', '攻擊範圍內的敵人防禦力降低7%'],
+      ['召喚物', '召唤物会降低被阻挡单位的防御力', '召喚物會降低被阻擋單位的防禦力'],
+      ['雙降', '攻击范围内的敌人防御力-100，法术抗性-10', '攻擊範圍內的敵人防禦力-100，法術抗性-10'],
+      ['無視防禦', '攻击时无视目标200点防御力', '攻擊時無視目標200點防禦力'],
+      ['提升防禦', '防御力+30%，持续20秒', '防禦力+30%，持續20秒'],
+      ['偷取防禦', '攻击时偷取目标50点防御力', '攻擊時偷取目標50點防禦力'],
+    ]
+    function servers() {
+      const operators = (style: 'array' | 'object') =>
+        Object.fromEntries(cases.map(([name], i) => [`char_720_${i}`, operator({ name, skills: [`sk_${i}`], style })]))
+      const skills = (lang: 1 | 2, style: 'array' | 'object') => cases.map((c, i) => basicSkill(`sk_${i}`, `技${i}`, { description: c[lang] }, style))
+      return {
+        cn: server({ terms: COMMON_TERMS, operators: operators('array'), skills: skills(1, 'array') }),
+        tw: server({ terms: COMMON_TERMS, operators: operators('object'), skills: skills(2, 'object') }),
+      }
+    }
+
+    test.each(['cn', 'tw'] as const)('%s:「防禦力-」「下降」「降低」「降低被阻擋單位的防禦力」命中並高亮,無視、提升、偷取不命中;定義標為非官方', (srv) => {
+      const { index } = buildWithPendingReviewedAsApply({ ...servers(), supplements: realSupplements })
+      const results = query(index, { conditions: applying('sup.defdown'), server: srv })
+      expect(Object.fromEntries(results.map((r) => [r.name, highlights(r.entries[0].stages[0].runs)]))).toEqual({
+        減號: [['防禦力-', 'sup.defdown']],
+        下降: [['防禦力下降', 'sup.defdown']],
+        降低: [['防禦力降低', 'sup.defdown']],
+        召喚物: [['降低被阻擋單位的防禦力', 'sup.defdown']],
+        雙降: [['防禦力-', 'sup.defdown'], ['法術抗性-', 'sup.resdown']],
+      })
+      expect(query(index, { conditions: applying('sup.resdown'), server: srv }).map((r) => r.name)).toEqual(['雙降'])
+      const keyword = keywordGroups(index, srv).flatMap((g) => g.rows.flat()).find((k) => k.id === 'sup.defdown')!
+      expect(keyword.name).toBe('減防')
+      expect(keyword.unofficial).toBe(true)
+      expect(plain(keyword.definition)).toBe('降低敵人的防禦力。')
+    })
+
+    test('cn:「防御力额外-」命中並高亮', () => {
+      const { index } = buildWithPendingReviewedAsApply({ cn: fixture({ 額外: '被阻挡的敌人防御力额外-30' }), supplements: realSupplements })
+      const [r] = query(index, { conditions: applying('sup.defdown'), server: 'cn' })
+      expect(r.name).toBe('額外')
+      expect(highlights(r.entries[0].stages[0].runs)).toEqual([['防御力额外-', 'sup.defdown']])
+    })
+  })
+
   describe('效果類型為空的補充關鍵字配對不標記', () => {
     function buildReviewed(input: BuildInput, decide: (text: string, keyword: string) => EffectType[]) {
       const first = buildIndex(input)
